@@ -1,0 +1,23 @@
+{
+  "name": "speakeasy-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.8.0",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.1.0",
+    "qrcode": "^1.5.4",
+    "querystring": "^0.2.1",
+    "speakeasy": "^2.0.0"
+  }
+}
