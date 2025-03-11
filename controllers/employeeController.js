@@ -3,6 +3,7 @@ const qrcode = require("qrcode");
 const { admin, db } = require("../config/firebaseConfig")
 
 exports.checkEmployee = async (req, res) => {
+    console.log("check employee,", req.body)
     try {
         const { mobileNumber } = req.body;
         if (!mobileNumber) return res.status(400).json({ message: "Mobile number is required" });
@@ -15,20 +16,21 @@ exports.checkEmployee = async (req, res) => {
         }
 
         const employeeData = querySnapshot.docs[0].data();
-        console.log("emp data", employeeData)
+       
 
         if (!employeeData.secret) {
             return res.status(400).json({ message: "Employee has not enabled 2FA" });
         }
-
+       
         res.json({
             success: true,
             message: "Employee exists and has 2FA enabled",
             employee: {
-                auth_id: employeeData.auth_id,
-                name: employeeData.name,
+                auth_id: employeeData.authId,
+                name: employeeData.nickname,
             }
         });
+       
 
     } catch (error) {
         console.error("❌ Error checking employee:", error);

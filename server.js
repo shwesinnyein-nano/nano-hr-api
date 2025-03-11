@@ -1,27 +1,58 @@
+
+const { db, admin } = require("./config/firebaseConfig");
+
 const express = require("express");
 const cors = require("cors");
-const bodyParser = require("body-parser");
 
 const authRoutes = require("./routes/authRoutes");
-const employeeRoutes = require("./routes/employeeRoutes")
-const lineRoutes = require("./routes/lineRoutes")
-const {db, admin} = require("./config/firebaseConfig")
+const employeeRoutes = require("./routes/employeeRoutes");
+const lineRoutes = require("./routes/lineRoutes");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(bodyParser.json());
 
-// db.collection("employees").add({ message: "Firestore is connected!" })
-//   .then(docRef => console.log("✅ Firestore connected. Test ID:", docRef.id))
-//   .catch(error => console.error("❌ Firestore connection error:", error));
+
+const allowedOrigin = process.env.NODE_ENV === 'production'
+    ? process.env.PRODUCTION_FRONTEND_URL // e.g., "https://your-production-domain.com"
+     : "http://localhost:4200";
+
+// app.use(cors({
+//   origin: allowedOrigin,
+//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//   allowedHeaders: ["Content-Type", "Authorization"],
+// }));
+
+// const productionUrl = process.env.PRODUCTION_FRONTEND_URL || "https://nano-hr.web.app";
+// console.log("production url", productionUrl)
+// const allowedOrigins = [productionUrl, "https://nano-hr.web.app"];
+
+const productionUrl = process.env.PRODUCTION_FRONTEND_URL || "http://localhost:4200";
+const allowedOrigins = [productionUrl, "http://localhost:4200"];
+
+
+app.use(cors({
+    origin: function (origin, callback) {
+
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            return callback(null, true);
+        } else {
+            return callback(new Error("Not allowed by CORS"));
+        }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+}));
+
+app.options('*', cors());
+
+
+
+app.use(express.json());
 
 
 app.use("/auth", authRoutes);
-app.use("/employee", employeeRoutes)
-app.use("/line", lineRoutes)
+app.use("/employee", employeeRoutes);
+app.use("/line", lineRoutes);
 
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
-
+module.exports = app;
