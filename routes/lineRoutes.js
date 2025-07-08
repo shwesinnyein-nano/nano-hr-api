@@ -8,5 +8,6 @@ router.get("/lineLoginCallback", lineController.lineLoginCallback);
 router.post("/send-notification-expense", lineController.sendLineNotificationExpense)
 router.post("/send-notification-income", lineController.sendLineNotificationIncome)
 router.post("/send-message-line", lineController.sendMessage)
+router.post("/send-notification-resignation", lineController.sendLineNotificationResignation)
 
 module.exports = router;

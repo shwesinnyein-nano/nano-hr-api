@@ -841,7 +841,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
         contents: [
           {
             type: "text",
-            text: "EXPENSE REQUEST",
+            text: "รายการตรวจสอบรายจ่าย",
             weight: "bold",
             color: "#1DB446",
             size: "sm"
@@ -876,7 +876,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Slip No",
+                    text: "หมายเลขสลิปค่าใช้จ่าย",
                     size: "xs",
                     color: "#555555",
                     flex: 0
@@ -896,7 +896,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Date",
+                    text: "วันที่ทำการขอ",
                     size: "xs",
                     color: "#555555",
                     flex: 0
@@ -916,7 +916,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Due Date",
+                    text: "วันครบกำหนดชำระ",
                     size: "xs",
                     color: "#555555",
                     flex: 0
@@ -937,7 +937,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Request By",
+                    text: "ทำการขอโดย",
                     size: "xs",
                     color: "#555555",
                     flex: 0,
@@ -963,7 +963,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                   {
                     type: "text",
                     color: "#555555",
-                    text: "Expense Type",
+                    text: "ประเภทค่าใช้จ่าย",
                     size: "xs"
                   },
                   {
@@ -980,7 +980,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Creditor Name",
+                    text: "ชื่อเจ้าหนี้",
                     color: "#555555",
                     size: "xs"
                   },
@@ -998,7 +998,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Amount",
+                    text: "จำนวนเงินรวม",
                     color: "#555555",
                     size: "xs"
                   },
@@ -1017,7 +1017,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Status",
+                    text: "สถานะ",
                     color: "#555555",
                     size: "xs"
                   },
@@ -1045,7 +1045,7 @@ exports.sendLineNotificationExpense = async (req, res) => {
                 type: "button",
                 action: {
                   type: "uri",
-                  label: "Review",
+                  label: "ตรวจสอบ",
                   uri: "https://nanostores.co.th/login"
                 }
               }
@@ -1108,7 +1108,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
         contents: [
           {
             type: "text",
-            text: "INCOME REQUEST",
+            text: "รายการตรวจสอบรายได้",
             weight: "bold",
             color: "#1DB446",
             size: "sm"
@@ -1143,7 +1143,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Slip No",
+                    text: "เลขที่สลิปรายได้",
                     size: "xs",
                     color: "#555555",
                     flex: 0
@@ -1163,7 +1163,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Income Date",
+                    text: "วันที่รับรายได้",
                     size: "xs",
                     color: "#555555",
                     flex: 0
@@ -1185,7 +1185,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Request By",
+                    text: "ทำการขอโดย",
                     size: "xs",
                     color: "#555555",
                     flex: 0,
@@ -1211,7 +1211,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
                   {
                     type: "text",
                     color: "#555555",
-                    text: "Income Type",
+                    text: "ประเภทรายได้",
                     size: "xs"
                   },
                   {
@@ -1228,7 +1228,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Debtor Name",
+                    text: "ชื่อลูกหนี้",
                     color: "#555555",
                     size: "xs"
                   },
@@ -1246,7 +1246,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Amount",
+                    text: "จำนวน",
                     color: "#555555",
                     size: "xs"
                   },
@@ -1265,7 +1265,7 @@ exports.sendLineNotificationIncome = async (req, res) => {
                 contents: [
                   {
                     type: "text",
-                    text: "Status",
+                    text: "สถานะ",
                     color: "#555555",
                     size: "xs"
                   },
@@ -1313,6 +1313,254 @@ exports.sendLineNotificationIncome = async (req, res) => {
       {
         to: lineId,
         messages: [{ type: 'flex', altText: 'Income Request Notification', contents: flex }]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}`,
+        },
+      }
+    );
+
+    res.json({ success: true, data: response.data });
+  } catch (error) {
+    console.error('LINE notification error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to send LINE notification' });
+  }
+};
+
+exports.sendLineNotificationResignation = async (req, res) => {
+  console.log("send ", req.body);
+  try {
+    const { lineId, message } = req.body; // Get data from frontend
+
+    if (!lineId) {
+      return res.status(400).json({ error: 'LINE ID is required' });
+    }
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+    
+
+    if(message.locationNameTh && message.branchNameTh){
+      message.locationNameTh = message.locationNameTh + ' , ' + message.branchNameTh
+    }
+   
+    const flex = {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: "คำขอลาออก",
+            weight: "bold",
+            color: "#1DB446",
+            size: "sm"
+          },
+          {
+            type: "text",
+            text: message.companyNameTh,
+            weight: "bold",
+            size: "lg",
+            margin: "sm"
+          },
+          {
+            type: "text",
+            text: message.locationNameTh ,
+            size: "xs",
+            color: "#aaaaaa",
+            wrap: true
+          },
+          {
+            type: "separator",
+            margin: "md"
+          },
+          {
+            type: "box",
+            layout: "vertical",
+            margin: "md",
+            spacing: "md",
+            contents: [
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  {
+                    type: "text",
+                    text: "รหัสพนักงาน",
+                    size: "xs",
+                    color: "#555555",
+                    flex: 0
+                  },
+                  {
+                    type: "text",
+                    text: message.employeeId,
+                    size: "xs",
+                    color: "#111111",
+                    align: "end"
+                  }
+                ]
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  {
+                    type: "text",
+                    text: "ชื่อ",
+                    size: "xs",
+                    color: "#555555",
+                    flex: 0
+                  },
+                  {
+                    type: "text",
+                    text: message.employeeName,
+                    size: "xs",
+                    color: "#111111",
+                    align: "end"
+                  }
+                ]
+              },
+
+              {
+                type: "box",
+                layout: "horizontal",
+                margin: "sm",
+                contents: [
+                  {
+                    type: "text",
+                    text: "ตำแหน่ง",
+                    size: "xs",
+                    color: "#555555",
+                    flex: 0,
+                    margin: "none"
+                  },
+                  {
+                    type: "text",
+                    text: message.positionNameTh,
+                    size: "xs",
+                    color: "#111111",
+                    align: "end"
+                  }
+                ],
+                spacing: "none"
+              },
+             
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  {
+                    type: "text",
+                    color: "#555555",
+                    text: "วันที่ทำการขอ",
+                    size: "xs"
+                  },
+                  {
+                    type: "text",
+                    text: message.createdDate,
+                    size: "xs",
+                    flex: 0
+                  }
+                ]
+              },
+              
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  {
+                    type: "text",
+                    text: "วันที่มีผลการลาออก",
+                    color: "#555555",
+                    size: "xs"
+                  },
+                  {
+                    type: "text",
+                    text: message.resignationDate,
+                    flex: 0,
+                    size: "xs",
+                    // color: "#1DB446"
+                  }
+                ]
+              },
+              {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  {
+                    type: "text",
+                    text: "เหตุผลการลาออก",
+                    color: "#555555",
+                    size: "xs"
+                  },
+                  {
+                    type: "text",
+                    text: message.reasonOfResignation,
+                    flex: 0,
+                    size: "xs",
+                    // color: "#1DB446"
+                  }
+                ]
+              },
+              // {
+              //   type: "box",
+              //   layout: "horizontal",
+              //   contents: [
+              //     {
+              //       type: "text",
+              //       text: "",
+              //       color: "#555555",
+              //       size: "xs"
+              //     },
+              //     {
+              //       type: "text",
+              //       text: message.resignationStatus,
+              //       flex: 0,
+              //       size: "xs",
+              //       color: "#1DB446"
+              //     }
+              //   ]
+              // },
+              
+            ]
+          },
+          {
+            type: "separator",
+            margin: "md"
+          },
+          {
+            type: "box",
+            layout: "horizontal",
+            margin: "none",
+            contents: [
+              {
+                type: "button",
+                action: {
+                  type: "uri",
+                  label: "ทบทวน",
+                  uri: "https://nanostores.co.th/login"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      styles: {
+        footer: {
+          separator: true
+        }
+      }
+    };
+
+    const response = await axios.post(
+      'https://api.line.me/v2/bot/message/push',
+      {
+        to: lineId,
+        messages: [{ type: 'flex', altText: 'Resignation Request', contents: flex }]
       },
       {
         headers: {

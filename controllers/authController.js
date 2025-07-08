@@ -42,31 +42,36 @@ exports.sendOTP = async (req, res) => {
 
 
 exports.verifyOTP = async (req, res) => {
+    
     try {
         const { mobileNumber, otp } = req.body;
-        console.log("mobile ", mobileNumber)
-        console.log("opt", otp)
+        
         if (!mobileNumber || !otp) return res.status(400).json({ message: "Mobile number and OTP are required" });
 
         const employeesRef = db.collection("employees");
         const querySnapshot = await employeesRef.where("primary_number", "==", mobileNumber).get();
-
+       
         if (querySnapshot.empty) {
             return res.status(404).json({ message: "Employee not found" });
         }
 
         const employeeData = querySnapshot.docs[0].data();
+      
         if (!employeeData.secret) {
             return res.status(400).json({ message: "Employee has not enabled 2FA" });
         }
 
-
+       
+        
         const verified = speakeasy.totp.verify({
             secret: employeeData.secret,
             encoding: "base32",
             token: otp,
             window: 2,
+            step: 30
         });
+
+       
 
         if (verified) {
             const firebaseCustomToken = await admin.auth().createCustomToken(employeeData.authId);

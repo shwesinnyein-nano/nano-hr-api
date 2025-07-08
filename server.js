@@ -8,6 +8,7 @@ const authRoutes = require("./routes/authRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
 const lineRoutes = require("./routes/lineRoutes");
 
+
 const app = express();
 
 
@@ -53,6 +54,7 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/employee", employeeRoutes);
 app.use("/line", lineRoutes);
+
 
 
 module.exports = app;
