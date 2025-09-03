@@ -432,6 +432,62 @@ exports.loginWithEmailPassword = async (req, res) => {
     }
 };
 
+// Check if email exists in employee table
+exports.checkEmail = async (req, res) => {
+    console.log("checkEmail called");
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email is required" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            return res.json({
+                success: true,
+                message: "Email not found in employee table",
+                emailExists: false,
+                email: email
+            });
+        } else {
+            const employeeDoc = querySnapshot.docs[0];
+            const employeeData = employeeDoc.data();
+            
+            return res.json({
+                success: true,
+                message: "Email found in employee table",
+                emailExists: true,
+                email: email,
+                employee: {
+                    id: employeeDoc.id,
+                    email: employeeData.email,
+                    nickname: employeeData.nickname,
+                    firstName: employeeData.firstName,
+                    lastName: employeeData.lastName,
+                    hasPassword: !!employeeData.password,
+                    status: employeeData.status,
+                    role: employeeData.role
+                }
+            });
+        }
+
+    } catch (error) {
+        console.error("❌ Error in checkEmail:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 // Verify custom token and get user info
 exports.verifyToken = async (req, res) => {
     console.log("verifyToken called");

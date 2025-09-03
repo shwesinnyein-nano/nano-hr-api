@@ -132,6 +132,295 @@ exports.getEmployeeList = async (req, res) => {
     }
 };
 
+// Employee login with email and password
+exports.login = async (req, res) => {
+    console.log("Employee login called");
+    try {
+        const { email, password, confirmPassword } = req.body;
+        
+        // Validation
+        if (!email || !password || !confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email, password, and confirm password are required" 
+            });
+        }
+
+        // Check if passwords match
+        if (password !== confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Password and confirm password do not match" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            // Employee doesn't exist - REGISTRATION FLOW
+            console.log(`Employee not found with email: ${email} - Starting registration`);
+            
+            // Create new employee record with email and password
+            const newEmployeeData = {
+                email: email,
+                password: password,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                status: "active",
+                role: "employee"
+            };
+
+            // Add new employee to Firestore
+            const newEmployeeRef = await employeesRef.add(newEmployeeData);
+            const newEmployeeDoc = await newEmployeeRef.get();
+            const savedEmployeeData = newEmployeeDoc.data();
+
+            console.log(`New employee registered with email: ${email}`);
+
+            // Return success response for registration
+            res.json({
+                success: true,
+                message: "Registration successful",
+                isRegistration: true,
+                employee: {
+                    id: newEmployeeDoc.id,
+                    email: savedEmployeeData.email,
+                    status: savedEmployeeData.status,
+                    role: savedEmployeeData.role,
+                    createdAt: savedEmployeeData.createdAt,
+                    updatedAt: savedEmployeeData.updatedAt
+                }
+            });
+
+        } else {
+            // Employee exists - LOGIN FLOW
+            const employeeDoc = querySnapshot.docs[0];
+            const employeeData = employeeDoc.data();
+
+            // Check if employee has a password set
+            if (!employeeData.password) {
+                // First time login - save the password
+                await employeeDoc.ref.update({ 
+                    password: password,
+                    updatedAt: new Date().toISOString()
+                });
+                
+                console.log(`Password saved for existing employee: ${email}`);
+                
+                // Return success response for first-time password setup
+                res.json({
+                    success: true,
+                    message: "Password saved and login successful",
+                    isRegistration: false,
+                    employee: {
+                        id: employeeDoc.id,
+                        authId: employeeData.authId,
+                        nickname: employeeData.nickname,
+                        firstName: employeeData.firstName,
+                        lastName: employeeData.lastName,
+                        email: employeeData.email,
+                        primaryNumber: employeeData.primary_number,
+                        companyName: employeeData.companyName,
+                        locationName: employeeData.locationName,
+                        branchName: employeeData.branchName,
+                        positionName: employeeData.positionName,
+                        status: employeeData.status,
+                        role: employeeData.role,
+                        profileImage: employeeData.profileImage,
+                        has2FA: !!employeeData.secret,
+                        joinDate: employeeData.joinDate,
+                        maritalStatus: employeeData.maritalStatus,
+                        dateOfBirth: employeeData.dateOfBirth,
+                        gender: employeeData.gender,
+                        salary: employeeData.salary,
+                        department: employeeData.department,
+                        createdAt: employeeData.createdAt,
+                        updatedAt: new Date().toISOString()
+                    }
+                });
+
+            } else {
+                // Employee has password - verify it
+                if (employeeData.password !== password) {
+                    return res.status(401).json({ 
+                        success: false,
+                        message: "Invalid password" 
+                    });
+                }
+
+                // Password matches - successful login
+                console.log(`Successful login for employee: ${email}`);
+
+                res.json({
+                    success: true,
+                    message: "Login successful",
+                    isRegistration: false,
+                    employee: {
+                        id: employeeDoc.id,
+                        authId: employeeData.authId,
+                        nickname: employeeData.nickname,
+                        firstName: employeeData.firstName,
+                        lastName: employeeData.lastName,
+                        email: employeeData.email,
+                        primaryNumber: employeeData.primary_number,
+                        companyName: employeeData.companyName,
+                        locationName: employeeData.locationName,
+                        branchName: employeeData.branchName,
+                        positionName: employeeData.positionName,
+                        status: employeeData.status,
+                        role: employeeData.role,
+                        profileImage: employeeData.profileImage,
+                        has2FA: !!employeeData.secret,
+                        joinDate: employeeData.joinDate,
+                        maritalStatus: employeeData.maritalStatus,
+                        dateOfBirth: employeeData.dateOfBirth,
+                        gender: employeeData.gender,
+                        salary: employeeData.salary,
+                        department: employeeData.department,
+                        createdAt: employeeData.createdAt,
+                        updatedAt: employeeData.updatedAt
+                    }
+                });
+            }
+        }
+
+    } catch (error) {
+        console.error("❌ Error in employee login:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// Check if email exists in employee table
+exports.checkEmail = async (req, res) => {
+    console.log("Employee checkEmail called");
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email is required" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            return res.json({
+                success: true,
+                message: "Email not found in employee table",
+                emailExists: false,
+                email: email
+            });
+        } else {
+            const employeeDoc = querySnapshot.docs[0];
+            const employeeData = employeeDoc.data();
+            
+            return res.json({
+                success: true,
+                message: "Email found in employee table",
+                emailExists: true,
+                email: email,
+                employee: {
+                    id: employeeDoc.id,
+                    email: employeeData.email,
+                    nickname: employeeData.nickname,
+                    firstName: employeeData.firstName,
+                    lastName: employeeData.lastName,
+                    hasPassword: !!employeeData.password,
+                    status: employeeData.status,
+                    role: employeeData.role
+                }
+            });
+        }
+
+    } catch (error) {
+        console.error("❌ Error in employee checkEmail:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// Set password for employee
+exports.setPassword = async (req, res) => {
+    console.log("Employee setPassword called");
+    try {
+        const { email, password, confirmPassword } = req.body;
+        
+        // Validation
+        if (!email || !password || !confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email, password, and confirm password are required" 
+            });
+        }
+
+        // Check if passwords match
+        if (password !== confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Password and confirm password do not match" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            return res.status(404).json({ 
+                success: false,
+                message: "Employee not found with this email address" 
+            });
+        }
+
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        // Update password
+        await employeeDoc.ref.update({ 
+            password: password,
+            updatedAt: new Date().toISOString()
+        });
+        
+        console.log(`Password set for employee: ${email}`);
+
+        res.json({
+            success: true,
+            message: "Password set successfully",
+            employee: {
+                id: employeeDoc.id,
+                email: employeeData.email,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                status: employeeData.status,
+                role: employeeData.role,
+                updatedAt: new Date().toISOString()
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error in employee setPassword:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 // Export the internal function so it can be used by other parts of the API
 exports.getEmployeeListInternal = getEmployeeListInternal;
 
