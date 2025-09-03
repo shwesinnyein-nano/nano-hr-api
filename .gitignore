@@ -129,3 +129,8 @@ dist
 .yarn/install-state.gz
 .pnp.*
 .vercel
+
+# Firebase configuration files (contain sensitive credentials)
+config/firebase-admin.json
+config/nano-hr-firebase-adminsdk-fbsvc-e6eb934127.json
+config/*-firebase-adminsdk-*.json
