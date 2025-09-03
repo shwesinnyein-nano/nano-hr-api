@@ -7,6 +7,7 @@ const cors = require("cors");
 const authRoutes = require("./routes/authRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
 const lineRoutes = require("./routes/lineRoutes");
+const resignationRoutes = require("./routes/resignationRoutes");
 
 
 const app = express();
@@ -54,6 +55,7 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 app.use("/employee", employeeRoutes);
 app.use("/line", lineRoutes);
+app.use("/resignation", resignationRoutes);
 
 
 

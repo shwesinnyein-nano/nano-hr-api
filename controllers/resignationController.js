@@ -1,5 +1,8 @@
 
-const { admin, db } = require("../config/firebaseConfig")
+const { admin, db } = require("../config/firebaseConfig");
+const axios = require("axios");
+
+const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 
 exports.sendLineNotificationResignation = async (req, res) => {
   console.log("sendLineNotificationResignation ", req.body);
