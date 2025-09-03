@@ -124,40 +124,25 @@ exports.generateSecret = async (req, res) => {
     }
 };
 
-// Email/Password Login with Firebase Authentication
-exports.loginWithEmailPassword = async (req, res) => {
-    console.log("loginWithEmailPassword called with:", req.body);
+// Login with Firebase ID Token (after client-side authentication)
+exports.loginWithIdToken = async (req, res) => {
+    console.log("loginWithIdToken called");
     try {
-        const { email, password } = req.body;
+        const { idToken } = req.body;
         
-        if (!email || !password) {
+        if (!idToken) {
             return res.status(400).json({ 
                 success: false,
-                message: "Email and password are required" 
+                message: "ID token is required" 
             });
         }
 
-        // Authenticate with Firebase using email and password
-        const userRecord = await admin.auth().getUserByEmail(email);
+        // Verify the ID token
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
         
-        if (!userRecord) {
-            return res.status(401).json({ 
-                success: false,
-                message: "Invalid email or password" 
-            });
-        }
-
-        // Check if user is disabled
-        if (userRecord.disabled) {
-            return res.status(401).json({ 
-                success: false,
-                message: "Account is disabled" 
-            });
-        }
-
         // Get employee data from Firestore
         const employeesRef = db.collection("employees");
-        const querySnapshot = await employeesRef.where("authId", "==", userRecord.uid).get();
+        const querySnapshot = await employeesRef.where("authId", "==", decodedToken.uid).get();
         
         if (querySnapshot.empty) {
             return res.status(404).json({ 
@@ -169,22 +154,15 @@ exports.loginWithEmailPassword = async (req, res) => {
         const employeeDoc = querySnapshot.docs[0];
         const employeeData = employeeDoc.data();
 
-        // Create custom token for the user
-        const customToken = await admin.auth().createCustomToken(userRecord.uid);
-
-        // Get user permissions/roles
-        const permissions = await getUserPermissions(userRecord.uid, employeeData);
-
         res.json({
             success: true,
             message: "Login successful",
             user: {
-                uid: userRecord.uid,
-                email: userRecord.email,
-                displayName: userRecord.displayName || employeeData.nickname,
-                emailVerified: userRecord.emailVerified,
-                disabled: userRecord.disabled,
-                customMetadata: userRecord.customClaims
+                uid: decodedToken.uid,
+                email: decodedToken.email,
+                displayName: decodedToken.name || employeeData.nickname,
+                emailVerified: decodedToken.email_verified,
+                customMetadata: decodedToken
             },
             employee: {
                 id: employeeDoc.id,
@@ -202,26 +180,16 @@ exports.loginWithEmailPassword = async (req, res) => {
                 role: employeeData.role,
                 profileImage: employeeData.profileImage,
                 has2FA: !!employeeData.secret
-            },
-            permissions: permissions,
-            customToken: customToken
+            }
         });
 
     } catch (error) {
-        console.error("❌ Error in loginWithEmailPassword:", error);
+        console.error("❌ Error in loginWithIdToken:", error);
         
-        // Handle specific Firebase auth errors
-        if (error.code === 'auth/user-not-found') {
+        if (error.code === 'auth/invalid-token') {
             return res.status(401).json({ 
                 success: false,
-                message: "Invalid email or password" 
-            });
-        }
-        
-        if (error.code === 'auth/invalid-email') {
-            return res.status(400).json({ 
-                success: false,
-                message: "Invalid email format" 
+                message: "Invalid token" 
             });
         }
 
@@ -233,73 +201,7 @@ exports.loginWithEmailPassword = async (req, res) => {
     }
 };
 
-// Helper function to get user permissions based on role and custom claims
-const getUserPermissions = async (uid, employeeData) => {
-    try {
-        // Get custom claims from Firebase Auth
-        const userRecord = await admin.auth().getUser(uid);
-        const customClaims = userRecord.customClaims || {};
 
-        // Define permissions based on role
-        const rolePermissions = {
-            'admin': {
-                employees: ['read', 'write', 'delete'],
-                attendance: ['read', 'write', 'delete'],
-                payroll: ['read', 'write', 'delete'],
-                reports: ['read', 'write'],
-                settings: ['read', 'write'],
-                resignation: ['read', 'write', 'approve']
-            },
-            'manager': {
-                employees: ['read', 'write'],
-                attendance: ['read', 'write'],
-                payroll: ['read'],
-                reports: ['read'],
-                settings: ['read'],
-                resignation: ['read', 'approve']
-            },
-            'hr': {
-                employees: ['read', 'write'],
-                attendance: ['read', 'write'],
-                payroll: ['read', 'write'],
-                reports: ['read'],
-                settings: ['read'],
-                resignation: ['read', 'write']
-            },
-            'employee': {
-                employees: ['read'],
-                attendance: ['read'],
-                payroll: ['read'],
-                reports: [],
-                settings: [],
-                resignation: ['read', 'write']
-            }
-        };
-
-        // Get permissions based on employee role
-        const role = employeeData.role || 'employee';
-        const permissions = rolePermissions[role] || rolePermissions['employee'];
-
-        // Merge with custom claims permissions if any
-        if (customClaims.permissions) {
-            return { ...permissions, ...customClaims.permissions };
-        }
-
-        return permissions;
-
-    } catch (error) {
-        console.error("❌ Error getting user permissions:", error);
-        // Return default employee permissions if error
-        return {
-            employees: ['read'],
-            attendance: ['read'],
-            payroll: ['read'],
-            reports: [],
-            settings: [],
-            resignation: ['read', 'write']
-        };
-    }
-};
 
 // Verify custom token and get user info
 exports.verifyToken = async (req, res) => {
@@ -333,9 +235,6 @@ exports.verifyToken = async (req, res) => {
         const employeeDoc = querySnapshot.docs[0];
         const employeeData = employeeDoc.data();
 
-        // Get permissions
-        const permissions = await getUserPermissions(decodedToken.uid, employeeData);
-
         res.json({
             success: true,
             message: "Token verified successfully",
@@ -355,8 +254,7 @@ exports.verifyToken = async (req, res) => {
                 locationName: employeeData.locationName,
                 role: employeeData.role,
                 profileImage: employeeData.profileImage
-            },
-            permissions: permissions
+            }
         });
 
     } catch (error) {
