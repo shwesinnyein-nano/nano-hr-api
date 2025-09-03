@@ -124,8 +124,75 @@ exports.generateSecret = async (req, res) => {
     }
 };
 
-// Login with Firebase ID Token (after client-side authentication)
-exports.loginWithIdToken = async (req, res) => {
+// Get employee data by auth ID
+exports.getEmployeeByAuthId = async (req, res) => {
+    console.log("getEmployeeByAuthId called");
+    try {
+        const { authId } = req.params;
+        
+        if (!authId) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Auth ID is required" 
+            });
+        }
+
+        // Get employee data from Firestore
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("authId", "==", authId).get();
+        
+        if (querySnapshot.empty) {
+            return res.status(404).json({ 
+                success: false,
+                message: "Employee not found with this auth ID" 
+            });
+        }
+
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        res.json({
+            success: true,
+            message: "Employee data retrieved successfully",
+            employee: {
+                id: employeeDoc.id,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error in getEmployeeByAuthId:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// OLD LOGIN - Login with Firebase ID Token (after client-side authentication) - BACKUP
+exports.loginWithIdToken_OLD = async (req, res) => {
     console.log("loginWithIdToken called");
     try {
         const { idToken } = req.body;
@@ -201,7 +268,101 @@ exports.loginWithIdToken = async (req, res) => {
     }
 };
 
+// NEW LOGIN - Email and Password Login System
+exports.loginWithEmailPassword = async (req, res) => {
+    console.log("loginWithEmailPassword called");
+    try {
+        const { email, password, confirmPassword } = req.body;
+        
+        // Validation
+        if (!email || !password || !confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email, password, and confirm password are required" 
+            });
+        }
 
+        // Check if passwords match
+        if (password !== confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Password and confirm password do not match" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            return res.status(404).json({ 
+                success: false,
+                message: "No employee found with this email address" 
+            });
+        }
+
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        // Check if employee already has a password set
+        if (employeeData.password) {
+            // Employee already has password, verify it
+            if (employeeData.password !== password) {
+                return res.status(401).json({ 
+                    success: false,
+                    message: "Invalid password" 
+                });
+            }
+        } else {
+            // First time login - save the password
+            await employeeDoc.ref.update({ 
+                password: password,
+                updatedAt: new Date().toISOString()
+            });
+            
+            console.log(`Password saved for employee: ${email}`);
+        }
+
+        // Return success response with employee data
+        res.json({
+            success: true,
+            message: employeeData.password ? "Login successful" : "Password saved and login successful",
+            employee: {
+                id: employeeDoc.id,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt || new Date().toISOString()
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error in loginWithEmailPassword:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
 
 // Verify custom token and get user info
 exports.verifyToken = async (req, res) => {
