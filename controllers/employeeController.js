@@ -23,6 +23,7 @@ const getEmployeeListInternal = async () => {
             const employeeData = doc.data();
             employees.push({
                 id: doc.id,
+                uid: employeeData.uid,
                 authId: employeeData.authId,
                 nickname: employeeData.nickname,
                 primaryNumber: employeeData.primary_number,
@@ -30,7 +31,25 @@ const getEmployeeListInternal = async () => {
                 locationName: employeeData.locationName,
                 has2FA: !!employeeData.secret,
                 createdAt: employeeData.createdAt,
-                updatedAt: employeeData.updatedAt
+                updatedAt: employeeData.updatedAt,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                company: employeeData.company,
+                companyName: employeeData.companyName,
+                location: employeeData.location,
+                locationName: employeeData.locationName,
+                branch: employeeData.branch,
+                branchName: employeeData.branchName,
+                status: employeeData.status,
+                position: employeeData.position,
+                positionName: employeeData.positionName,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                profileImage: employeeData.profileImage,
+                role: employeeData.role,
+               
+
+
             });
         });
 
