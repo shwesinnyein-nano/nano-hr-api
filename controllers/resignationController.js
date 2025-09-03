@@ -2,7 +2,7 @@
 const { admin, db } = require("../config/firebaseConfig")
 
 exports.sendLineNotificationResignation = async (req, res) => {
-  console.log("send ", req.body);
+  console.log("sendLineNotificationResignation ", req.body);
   try {
     const { lineId, message } = req.body; // Get data from frontend
 

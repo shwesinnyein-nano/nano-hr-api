@@ -5,8 +5,8 @@ const lineConfig = require('../config/lineConfig');
 
 const querystring = require('querystring');
 
-
-const CHANNEL_ACCESS_TOKEN = 'RSLblUCo+9KGnElBgVQIentYDKv0TEbQvlDyZYDfvqSxReizAhCGtQTkK23YTtTArQSqYH9r+/W4lKStPxmZbMuKUv6jzjArZbTAvoVjfPD/K32QCCI80aejeGIycf55A5HA1pg5X2CuS7X95nWGJQdB04t89/1O/w1cDnyilFU='
+const   CHANNEL_ACCESS_TOKEN = '83jsAUqItJtFpq0BnwinMjcqYmBKOAaCaQH6Pu//8cKDMTA6HWJIrvfU1uIIvphWPX/3lcLOk0MbqBwM5RSfyRyjjUFheCNYHWw+xSMn8zuuH6ep8JvgyjuV0RV8zMLqTGnBYEN0AKpBuYJ6qlQHFgdB04t89/1O/w1cDnyilFU='
+//const CHANNEL_ACCESS_TOKEN = 'RSLblUCo+9KGnElBgVQIentYDKv0TEbQvlDyZYDfvqSxReizAhCGtQTkK23YTtTArQSqYH9r+/W4lKStPxmZbMuKUv6jzjArZbTAvoVjfPD/K32QCCI80aejeGIycf55A5HA1pg5X2CuS7X95nWGJQdB04t89/1O/w1cDnyilFU='
 
 exports.lineLoginCallback = async (req, res) => {
   try {
@@ -1346,7 +1346,7 @@ exports.sendLineNotificationResignation = async (req, res) => {
     if(message.locationNameTh && message.branchNameTh){
       message.locationNameTh = message.locationNameTh + ' , ' + message.branchNameTh
     }
-   
+   console.log("chanel access token", CHANNEL_ACCESS_TOKEN)
     const flex = {
       type: "bubble",
       body: {
@@ -1542,7 +1542,9 @@ exports.sendLineNotificationResignation = async (req, res) => {
                 action: {
                   type: "uri",
                   label: "ทบทวน",
-                  uri: "https://nanostores.co.th/login"
+                  uri: `https://nano-hr.web.app/resign-detail-view/${message.uid}`
+                  //uri: `https://nano-hr.web.app/resignation/resign-detail-view/${message.uid}`
+                 // uri: "https://nanostores.co.th/login"
                 }
               }
             ]
