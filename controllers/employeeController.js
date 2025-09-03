@@ -26,7 +26,7 @@ const getEmployeeListInternal = async () => {
                 uid: employeeData.uid,
                 authId: employeeData.authId,
                 nickname: employeeData.nickname,
-                primaryNumber: employeeData.primary_number || null,
+                primary_number: employeeData.primary_number || null,
                 companyName: employeeData.companyName || null,
                 locationName: employeeData.locationName || null,
                 has2FA: !!employeeData.secret || null,
