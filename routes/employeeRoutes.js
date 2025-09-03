@@ -8,6 +8,8 @@ const router = express.Router();
 router.post("/check-employee", employeeController.checkEmployee);
 router.get("/list", employeeController.getEmployeeList);
 router.get("/stats", employeeController.getEmployeeStats);
+router.get("/search", employeeController.searchEmployees);
+router.get("/filter-options", employeeController.getEmployeeFilterOptions);
 
 
 module.exports = router;

@@ -184,3 +184,247 @@ exports.getEmployeeStats = async (req, res) => {
         });
     }
 };
+
+// Search and filter employees API
+exports.searchEmployees = async (req, res) => {
+    console.log("searchEmployees called with query:", req.query);
+    try {
+        const {
+            search,           // General search term (searches in name, nickname, email)
+            company,          // Filter by company
+            location,         // Filter by location
+            branch,           // Filter by branch
+            position,         // Filter by position
+            status,           // Filter by status (active, inactive, etc.)
+            role,             // Filter by role
+            has2FA,           // Filter by 2FA status (true/false)
+            maritalStatus,    // Filter by marital status
+            page = 1,         // Pagination
+            limit = 20,       // Items per page
+            sortBy = 'nickname', // Sort field
+            sortOrder = 'asc'    // Sort order (asc/desc)
+        } = req.query;
+
+        let query = db.collection("employees");
+
+        // Apply filters
+        if (company) {
+            query = query.where("company", "==", company);
+        }
+        if (location) {
+            query = query.where("location", "==", location);
+        }
+        if (branch) {
+            query = query.where("branch", "==", branch);
+        }
+        if (position) {
+            query = query.where("position", "==", position);
+        }
+        if (status) {
+            query = query.where("status", "==", status);
+        }
+        if (role) {
+            query = query.where("role", "==", role);
+        }
+        if (maritalStatus) {
+            query = query.where("maritalStatus", "==", maritalStatus);
+        }
+        if (has2FA !== undefined) {
+            const has2FABool = has2FA === 'true';
+            if (has2FABool) {
+                query = query.where("secret", "!=", null);
+            } else {
+                query = query.where("secret", "==", null);
+            }
+        }
+
+        // Get all matching documents
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No employees found matching the criteria",
+                data: [],
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages: 0,
+                    totalItems: 0,
+                    itemsPerPage: parseInt(limit)
+                }
+            });
+        }
+
+        let employees = [];
+        snapshot.forEach(doc => {
+            const employeeData = doc.data();
+            employees.push({
+                id: doc.id,
+                uid: employeeData.uid,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                has2FA: !!employeeData.secret,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                company: employeeData.company,
+                location: employeeData.location,
+                branch: employeeData.branch,
+                branchName: employeeData.branchName,
+                status: employeeData.status,
+                position: employeeData.position,
+                positionName: employeeData.positionName,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                profileImage: employeeData.profileImage,
+                role: employeeData.role,
+                email: employeeData.email || '',
+                department: employeeData.department || '',
+                salary: employeeData.salary || null
+            });
+        });
+
+        // Apply text search if provided
+        if (search) {
+            const searchTerm = search.toLowerCase();
+            employees = employees.filter(emp => 
+                (emp.nickname && emp.nickname.toLowerCase().includes(searchTerm)) ||
+                (emp.firstName && emp.firstName.toLowerCase().includes(searchTerm)) ||
+                (emp.lastName && emp.lastName.toLowerCase().includes(searchTerm)) ||
+                (emp.email && emp.email.toLowerCase().includes(searchTerm)) ||
+                (emp.primaryNumber && emp.primaryNumber.includes(searchTerm)) ||
+                (emp.companyName && emp.companyName.toLowerCase().includes(searchTerm)) ||
+                (emp.locationName && emp.locationName.toLowerCase().includes(searchTerm)) ||
+                (emp.branchName && emp.branchName.toLowerCase().includes(searchTerm)) ||
+                (emp.positionName && emp.positionName.toLowerCase().includes(searchTerm))
+            );
+        }
+
+        // Apply sorting
+        employees.sort((a, b) => {
+            let aValue = a[sortBy] || '';
+            let bValue = b[sortBy] || '';
+            
+            // Handle different data types
+            if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+            if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+            
+            if (sortOrder === 'desc') {
+                return bValue > aValue ? 1 : bValue < aValue ? -1 : 0;
+            } else {
+                return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+            }
+        });
+
+        // Apply pagination
+        const totalItems = employees.length;
+        const totalPages = Math.ceil(totalItems / limit);
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedEmployees = employees.slice(startIndex, endIndex);
+
+        res.json({
+            success: true,
+            message: "Employee search completed successfully",
+            data: paginatedEmployees,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: totalPages,
+                totalItems: totalItems,
+                itemsPerPage: parseInt(limit),
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1
+            },
+            filters: {
+                search: search || null,
+                company: company || null,
+                location: location || null,
+                branch: branch || null,
+                position: position || null,
+                status: status || null,
+                role: role || null,
+                has2FA: has2FA || null,
+                maritalStatus: maritalStatus || null
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error searching employees:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// Get employee filter options (for dropdowns, etc.)
+exports.getEmployeeFilterOptions = async (req, res) => {
+    console.log("getEmployeeFilterOptions called");
+    try {
+        const employeesRef = db.collection("employees");
+        const snapshot = await employeesRef.get();
+
+        if (snapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No employees found",
+                data: {
+                    companies: [],
+                    locations: [],
+                    branches: [],
+                    positions: [],
+                    statuses: [],
+                    roles: [],
+                    maritalStatuses: []
+                }
+            });
+        }
+
+        const companies = new Set();
+        const locations = new Set();
+        const branches = new Set();
+        const positions = new Set();
+        const statuses = new Set();
+        const roles = new Set();
+        const maritalStatuses = new Set();
+
+        snapshot.forEach(doc => {
+            const employeeData = doc.data();
+            
+            if (employeeData.companyName) companies.add(employeeData.companyName);
+            if (employeeData.locationName) locations.add(employeeData.locationName);
+            if (employeeData.branchName) branches.add(employeeData.branchName);
+            if (employeeData.positionName) positions.add(employeeData.positionName);
+            if (employeeData.status) statuses.add(employeeData.status);
+            if (employeeData.role) roles.add(employeeData.role);
+            if (employeeData.maritalStatus) maritalStatuses.add(employeeData.maritalStatus);
+        });
+
+        res.json({
+            success: true,
+            message: "Filter options retrieved successfully",
+            data: {
+                companies: Array.from(companies).sort(),
+                locations: Array.from(locations).sort(),
+                branches: Array.from(branches).sort(),
+                positions: Array.from(positions).sort(),
+                statuses: Array.from(statuses).sort(),
+                roles: Array.from(roles).sort(),
+                maritalStatuses: Array.from(maritalStatuses).sort()
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting filter options:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
