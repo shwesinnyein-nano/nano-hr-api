@@ -268,7 +268,7 @@ exports.loginWithIdToken_OLD = async (req, res) => {
     }
 };
 
-// NEW LOGIN - Email and Password Login System
+// NEW LOGIN/REGISTER - Email and Password Login/Registration System
 exports.loginWithEmailPassword = async (req, res) => {
     console.log("loginWithEmailPassword called");
     try {
@@ -295,64 +295,132 @@ exports.loginWithEmailPassword = async (req, res) => {
         const querySnapshot = await employeesRef.where("email", "==", email).get();
         
         if (querySnapshot.empty) {
-            return res.status(404).json({ 
-                success: false,
-                message: "No employee found with this email address" 
+            // Employee doesn't exist - REGISTRATION FLOW
+            console.log(`Employee not found with email: ${email} - Starting registration`);
+            
+            // Create new employee record with email and password
+            const newEmployeeData = {
+                email: email,
+                password: password,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                status: "active",
+                role: "employee"
+            };
+
+            // Add new employee to Firestore
+            const newEmployeeRef = await employeesRef.add(newEmployeeData);
+            const newEmployeeDoc = await newEmployeeRef.get();
+            const savedEmployeeData = newEmployeeDoc.data();
+
+            console.log(`New employee registered with email: ${email}`);
+
+            // Return success response for registration
+            res.json({
+                success: true,
+                message: "Registration successful",
+                isRegistration: true,
+                employee: {
+                    id: newEmployeeDoc.id,
+                    email: savedEmployeeData.email,
+                    status: savedEmployeeData.status,
+                    role: savedEmployeeData.role,
+                    createdAt: savedEmployeeData.createdAt,
+                    updatedAt: savedEmployeeData.updatedAt
+                }
             });
-        }
 
-        const employeeDoc = querySnapshot.docs[0];
-        const employeeData = employeeDoc.data();
+        } else {
+            // Employee exists - LOGIN FLOW
+            const employeeDoc = querySnapshot.docs[0];
+            const employeeData = employeeDoc.data();
 
-        // Check if employee already has a password set
-        if (employeeData.password) {
-            // Employee already has password, verify it
-            if (employeeData.password !== password) {
-                return res.status(401).json({ 
-                    success: false,
-                    message: "Invalid password" 
+            // Check if employee has a password set
+            if (!employeeData.password) {
+                // First time login - save the password
+                await employeeDoc.ref.update({ 
+                    password: password,
+                    updatedAt: new Date().toISOString()
+                });
+                
+                console.log(`Password saved for existing employee: ${email}`);
+                
+                // Return success response for first-time password setup
+                res.json({
+                    success: true,
+                    message: "Password saved and login successful",
+                    isRegistration: false,
+                    employee: {
+                        id: employeeDoc.id,
+                        authId: employeeData.authId,
+                        nickname: employeeData.nickname,
+                        firstName: employeeData.firstName,
+                        lastName: employeeData.lastName,
+                        email: employeeData.email,
+                        primaryNumber: employeeData.primary_number,
+                        companyName: employeeData.companyName,
+                        locationName: employeeData.locationName,
+                        branchName: employeeData.branchName,
+                        positionName: employeeData.positionName,
+                        status: employeeData.status,
+                        role: employeeData.role,
+                        profileImage: employeeData.profileImage,
+                        has2FA: !!employeeData.secret,
+                        joinDate: employeeData.joinDate,
+                        maritalStatus: employeeData.maritalStatus,
+                        dateOfBirth: employeeData.dateOfBirth,
+                        gender: employeeData.gender,
+                        salary: employeeData.salary,
+                        department: employeeData.department,
+                        createdAt: employeeData.createdAt,
+                        updatedAt: new Date().toISOString()
+                    }
+                });
+
+            } else {
+                // Employee has password - verify it
+                if (employeeData.password !== password) {
+                    return res.status(401).json({ 
+                        success: false,
+                        message: "Invalid password" 
+                    });
+                }
+
+                // Password matches - successful login
+                console.log(`Successful login for employee: ${email}`);
+
+                res.json({
+                    success: true,
+                    message: "Login successful",
+                    isRegistration: false,
+                    employee: {
+                        id: employeeDoc.id,
+                        authId: employeeData.authId,
+                        nickname: employeeData.nickname,
+                        firstName: employeeData.firstName,
+                        lastName: employeeData.lastName,
+                        email: employeeData.email,
+                        primaryNumber: employeeData.primary_number,
+                        companyName: employeeData.companyName,
+                        locationName: employeeData.locationName,
+                        branchName: employeeData.branchName,
+                        positionName: employeeData.positionName,
+                        status: employeeData.status,
+                        role: employeeData.role,
+                        profileImage: employeeData.profileImage,
+                        has2FA: !!employeeData.secret,
+                        joinDate: employeeData.joinDate,
+                        maritalStatus: employeeData.maritalStatus,
+                        dateOfBirth: employeeData.dateOfBirth,
+                        gender: employeeData.gender,
+                        salary: employeeData.salary,
+                        department: employeeData.department,
+                        createdAt: employeeData.createdAt,
+                        updatedAt: employeeData.updatedAt
+                    }
                 });
             }
-        } else {
-            // First time login - save the password
-            await employeeDoc.ref.update({ 
-                password: password,
-                updatedAt: new Date().toISOString()
-            });
-            
-            console.log(`Password saved for employee: ${email}`);
         }
-
-        // Return success response with employee data
-        res.json({
-            success: true,
-            message: employeeData.password ? "Login successful" : "Password saved and login successful",
-            employee: {
-                id: employeeDoc.id,
-                authId: employeeData.authId,
-                nickname: employeeData.nickname,
-                firstName: employeeData.firstName,
-                lastName: employeeData.lastName,
-                email: employeeData.email,
-                primaryNumber: employeeData.primary_number,
-                companyName: employeeData.companyName,
-                locationName: employeeData.locationName,
-                branchName: employeeData.branchName,
-                positionName: employeeData.positionName,
-                status: employeeData.status,
-                role: employeeData.role,
-                profileImage: employeeData.profileImage,
-                has2FA: !!employeeData.secret,
-                joinDate: employeeData.joinDate,
-                maritalStatus: employeeData.maritalStatus,
-                dateOfBirth: employeeData.dateOfBirth,
-                gender: employeeData.gender,
-                salary: employeeData.salary,
-                department: employeeData.department,
-                createdAt: employeeData.createdAt,
-                updatedAt: employeeData.updatedAt || new Date().toISOString()
-            }
-        });
 
     } catch (error) {
         console.error("❌ Error in loginWithEmailPassword:", error);
