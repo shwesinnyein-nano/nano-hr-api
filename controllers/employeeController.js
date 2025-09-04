@@ -533,6 +533,74 @@ exports.getLeaveSettings = async (req, res) => {
     }
 };
 
+// Get employee leave list filtered by UID
+exports.getEmployeeLeaveList = async (req, res) => {
+    console.log("Get employee leave list called");
+    try {
+        const { uid } = req.params;
+        
+        if (!uid) {
+            return res.status(400).json({ 
+                success: false,
+                message: "UID is required" 
+            });
+        }
+
+        // Get employee leave records filtered by UID
+        const employeeLeaveRef = db.collection("employee-leave");
+        const querySnapshot = await employeeLeaveRef.where("uid", "==", uid).get();
+
+        if (querySnapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No leave records found for this employee",
+                data: [],
+                count: 0
+            });
+        }
+
+        const leaveRecords = [];
+        querySnapshot.forEach(doc => {
+            const leaveData = doc.data();
+            leaveRecords.push({
+                id: doc.id,
+                uid: leaveData.uid,
+                leaveType: leaveData.leaveType,
+                leaveTypeName: leaveData.leaveTypeName,
+                startDate: leaveData.startDate,
+                endDate: leaveData.endDate,
+                totalDays: leaveData.totalDays,
+                reason: leaveData.reason,
+                status: leaveData.status,
+                statusName: leaveData.statusName,
+                approvedBy: leaveData.approvedBy,
+                approvedDate: leaveData.approvedDate,
+                rejectedReason: leaveData.rejectedReason,
+                createdAt: leaveData.createdAt,
+                updatedAt: leaveData.updatedAt
+            });
+        });
+
+        // Sort by created date (newest first)
+        leaveRecords.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        res.json({
+            success: true,
+            message: "Employee leave records retrieved successfully",
+            count: leaveRecords.length,
+            data: leaveRecords
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting employee leave list:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 // Export the internal function so it can be used by other parts of the API
 exports.getEmployeeListInternal = getEmployeeListInternal;
 

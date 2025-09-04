@@ -11,6 +11,7 @@ router.post("/register", employeeController.register);
 router.post("/check-email", employeeController.checkEmail);
 router.get("/profile/:uid", employeeController.getProfileByUid);
 router.get("/leave-settings", employeeController.getLeaveSettings);
+router.get("/leave-list/:uid", employeeController.getEmployeeLeaveList);
 router.get("/list", employeeController.getEmployeeList);
 router.get("/stats", employeeController.getEmployeeStats);
 router.get("/search", employeeController.searchEmployees);
