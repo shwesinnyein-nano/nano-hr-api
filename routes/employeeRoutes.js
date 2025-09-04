@@ -9,6 +9,7 @@ router.post("/check-employee", employeeController.checkEmployee);
 router.post("/login", employeeController.login);
 router.post("/register", employeeController.register);
 router.post("/check-email", employeeController.checkEmail);
+router.post("/create-leave-request", employeeController.createLeaveRequest);
 router.get("/profile/:uid", employeeController.getProfileByUid);
 router.get("/leave-settings", employeeController.getLeaveSettings);
 router.get("/leave-list/:uid", employeeController.getEmployeeLeaveList);

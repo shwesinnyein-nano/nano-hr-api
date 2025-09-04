@@ -601,6 +601,148 @@ exports.getEmployeeLeaveList = async (req, res) => {
     }
 };
 
+// Create leave request
+exports.createLeaveRequest = async (req, res) => {
+    console.log("Create leave request called");
+    try {
+        const { 
+            uid, 
+            leaveType, 
+            leaveTypeName, 
+            requestType, // 'daily' or 'hourly'
+            fromDate, 
+            toDate, 
+            date, 
+            workingShift, 
+            startTime, 
+            endTime, 
+            reason, 
+            attachment 
+        } = req.body;
+        
+        // Validation
+        if (!uid || !leaveType || !leaveTypeName || !requestType || !reason) {
+            return res.status(400).json({ 
+                success: false,
+                message: "UID, leaveType, leaveTypeName, requestType, and reason are required" 
+            });
+        }
+
+        // Validate request type
+        if (!['daily', 'hourly'].includes(requestType)) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Request type must be 'daily' or 'hourly'" 
+            });
+        }
+
+        // Validate daily leave
+        if (requestType === 'daily') {
+            if (!fromDate || !toDate) {
+                return res.status(400).json({ 
+                    success: false,
+                    message: "From date and to date are required for daily leave" 
+                });
+            }
+        }
+
+        // Validate hourly leave
+        if (requestType === 'hourly') {
+            if (!date || !workingShift || !startTime || !endTime) {
+                return res.status(400).json({ 
+                    success: false,
+                    message: "Date, working shift, start time, and end time are required for hourly leave" 
+                });
+            }
+        }
+
+        // Calculate total days for daily leave
+        let totalDays = 0;
+        if (requestType === 'daily') {
+            const start = new Date(fromDate);
+            const end = new Date(toDate);
+            const timeDiff = end.getTime() - start.getTime();
+            totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
+        }
+
+        // Create leave request data
+        const leaveRequestData = {
+            uid: uid,
+            leaveType: leaveType,
+            leaveTypeName: leaveTypeName,
+            requestType: requestType,
+            reason: reason,
+            attachment: attachment || null,
+            status: 'pending',
+            statusName: 'Pending',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        // Add daily leave specific fields
+        if (requestType === 'daily') {
+            leaveRequestData.fromDate = fromDate;
+            leaveRequestData.toDate = toDate;
+            leaveRequestData.totalDays = totalDays;
+        }
+
+        // Add hourly leave specific fields
+        if (requestType === 'hourly') {
+            leaveRequestData.date = date;
+            leaveRequestData.workingShift = workingShift;
+            leaveRequestData.startTime = startTime;
+            leaveRequestData.endTime = endTime;
+            leaveRequestData.totalDays = 0; // Hourly leave doesn't count as full days
+        }
+
+        // Save to Firestore
+        const leaveRequestRef = await db.collection("employee-leave").add(leaveRequestData);
+        const leaveRequestDoc = await leaveRequestRef.get();
+        const savedLeaveRequest = leaveRequestDoc.data();
+
+        console.log(`Leave request created for employee: ${uid}`);
+
+        res.json({
+            success: true,
+            message: "Leave request created successfully",
+            leaveRequest: {
+                id: leaveRequestDoc.id,
+                uid: savedLeaveRequest.uid,
+                leaveType: savedLeaveRequest.leaveType,
+                leaveTypeName: savedLeaveRequest.leaveTypeName,
+                requestType: savedLeaveRequest.requestType,
+                reason: savedLeaveRequest.reason,
+                attachment: savedLeaveRequest.attachment,
+                status: savedLeaveRequest.status,
+                statusName: savedLeaveRequest.statusName,
+                totalDays: savedLeaveRequest.totalDays,
+                createdAt: savedLeaveRequest.createdAt,
+                updatedAt: savedLeaveRequest.updatedAt,
+                // Daily leave fields
+                ...(requestType === 'daily' && {
+                    fromDate: savedLeaveRequest.fromDate,
+                    toDate: savedLeaveRequest.toDate
+                }),
+                // Hourly leave fields
+                ...(requestType === 'hourly' && {
+                    date: savedLeaveRequest.date,
+                    workingShift: savedLeaveRequest.workingShift,
+                    startTime: savedLeaveRequest.startTime,
+                    endTime: savedLeaveRequest.endTime
+                })
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error creating leave request:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 // Export the internal function so it can be used by other parts of the API
 exports.getEmployeeListInternal = getEmployeeListInternal;
 
