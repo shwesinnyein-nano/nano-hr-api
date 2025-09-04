@@ -669,12 +669,11 @@ exports.createLeaveRequest = async (req, res) => {
 
         // Generate unique leave request ID and UUID v4
         const leaveRequestId = uuidv4();
-        const uid = uuidv4();
 
         // Create leave request data
         const leaveRequestData = {
             id: leaveRequestId,
-            uid: uid,
+            uid: leaveRequestId,
             employeeId: employeeId,
             leaveType: leaveType,
             leaveTypeName: leaveTypeName,
@@ -703,8 +702,9 @@ exports.createLeaveRequest = async (req, res) => {
             leaveRequestData.totalDays = 0; // Hourly leave doesn't count as full days
         }
 
-        // Save to Firestore
-        const leaveRequestRef = await db.collection("employee-leave").add(leaveRequestData);
+        // Save to Firestore using custom document ID
+        const leaveRequestRef = db.collection("employee-leave").doc(leaveRequestId);
+        await leaveRequestRef.set(leaveRequestData);
         const leaveRequestDoc = await leaveRequestRef.get();
         const savedLeaveRequest = leaveRequestDoc.data();
 
