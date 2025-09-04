@@ -668,7 +668,7 @@ exports.createLeaveRequest = async (req, res) => {
         }
 
         // Generate unique leave request ID and UUID v4
-        const leaveRequestId = `LR-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        const leaveRequestId = uuidv4();
         const uid = uuidv4();
 
         // Create leave request data
