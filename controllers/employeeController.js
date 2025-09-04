@@ -482,6 +482,57 @@ exports.getProfileByUid = async (req, res) => {
     }
 };
 
+// Get leave settings list
+exports.getLeaveSettings = async (req, res) => {
+    console.log("Get leave settings called");
+    try {
+        const leaveSettingsRef = db.collection("leave-settings");
+        const snapshot = await leaveSettingsRef.get();
+
+        if (snapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No leave settings found",
+                data: [],
+                count: 0
+            });
+        }
+
+        const leaveSettings = [];
+        snapshot.forEach(doc => {
+            const leaveSettingData = doc.data();
+            leaveSettings.push({
+                id: doc.id,
+                uid: leaveSettingData.uid,
+                leaveType: leaveSettingData.title,
+                leaveTypeEng: leaveSettingData.titleEng,
+                maxDays: leaveSettingData.leaveDay,
+                isPaid: leaveSettingData.isPaid,
+                gender: leaveSettingData.gender,
+                description: leaveSettingData.description,
+                isActive: leaveSettingData.isActive,
+                createdAt: leaveSettingData.createdDate,
+                updatedAt: leaveSettingData.updatedDate
+            });
+        });
+
+        res.json({
+            success: true,
+            message: "Leave settings retrieved successfully",
+            count: leaveSettings.length,
+            data: leaveSettings
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting leave settings:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 // Export the internal function so it can be used by other parts of the API
 exports.getEmployeeListInternal = getEmployeeListInternal;
 
