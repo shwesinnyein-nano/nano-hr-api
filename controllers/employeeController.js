@@ -579,7 +579,8 @@ exports.getEmployeeLeaveList = async (req, res) => {
                 approvedDate: leaveData.approvedDate,
                 rejectedReason: leaveData.rejectedReason,
                 createdAt: leaveData.createdAt,
-                updatedAt: leaveData.updatedAt
+                updatedAt: leaveData.updatedAt,
+                attachment: leaveData.attachment 
             });
         });
 
