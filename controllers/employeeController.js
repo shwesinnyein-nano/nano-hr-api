@@ -1,5 +1,6 @@
 const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
+const { v4: uuidv4 } = require('uuid');
 const { admin, db } = require("../config/firebaseConfig");
 
 // Internal function to get employee list (can be called from other parts of the API)
@@ -666,9 +667,9 @@ exports.createLeaveRequest = async (req, res) => {
             totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
         }
 
-        // Generate unique leave request ID and UID
+        // Generate unique leave request ID and UUID v4
         const leaveRequestId = `LR-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-        const uid = `${Date.now().toString(16)}-${Math.random().toString(16).substr(2, 4)}-${Math.random().toString(16).substr(2, 4)}-${Math.random().toString(16).substr(2, 4)}-${Math.random().toString(16).substr(2, 12)}`;
+        const uid = uuidv4();
 
         // Create leave request data
         const leaveRequestData = {
