@@ -254,13 +254,40 @@ exports.checkEmail = async (req, res) => {
                 email: email,
                 employee: {
                     id: employeeDoc.id,
-                    email: employeeData.email,
-                    nickname: employeeData.nickname,
-                    firstName: employeeData.firstName,
-                    lastName: employeeData.lastName,
+                    uid: employeeData.uid,
+                    authId: employeeData.authId ?? null,
+                    email: employeeData.email ?? null,
+                    nickname: employeeData.nickname ?? null,
+                    firstName: employeeData.firstName ?? null,
+                    lastName: employeeData.lastName ?? null,
                     hasPassword: !!employeeData.password,
-                    status: employeeData.status,
-                    role: employeeData.role
+                    status: employeeData.status ?? null,
+                    role: employeeData.role ?? null,
+                    profileImage: employeeData.profileImage ?? null,
+                    has2FA: !!employeeData.secret,
+                    joinDate: employeeData.joinDate ?? null,
+                    maritalStatus: employeeData.maritalStatus ?? null,
+                    dateOfBirth: employeeData.dateOfBirth ?? null,
+                    gender: employeeData.gender ?? null,
+                    salary: employeeData.salary ?? null,
+                    department: employeeData.department ?? null,
+                    createdAt: employeeData.createdAt ?? null,
+                    updatedAt: employeeData.updatedAt ?? null,
+                    title: employeeData.title ?? null,
+                    idAddress: employeeData.idAddress ?? null,
+                    subDistrict: employeeData.subDistrict ?? null,
+                    district: employeeData.district ?? null,
+                    province: employeeData.province ?? null,
+                    idType: employeeData.idType ?? null,
+                    idCardNumber: employeeData.idCardNumber ?? null,
+                    company: employeeData.company ?? null,
+                    companyName: employeeData.companyName ?? null,
+                    location: employeeData.location ?? null,
+                    locationName: employeeData.locationName ?? null,
+                    branch: employeeData.branch ?? null,
+                    branchName: employeeData.branchName ?? null,
+                    position: employeeData.position ?? null,
+                    positionName: employeeData.positionName ?? null,
                 }
             });
         }
@@ -363,6 +390,90 @@ exports.register = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error in employee register:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// Get employee profile by UID
+exports.getProfileByUid = async (req, res) => {
+    console.log("Get employee profile by UID called");
+    try {
+        const { uid } = req.params;
+        
+        if (!uid) {
+            return res.status(400).json({ 
+                success: false,
+                message: "UID is required" 
+            });
+        }
+
+        // Check if employee exists with this UID
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("uid", "==", uid).get();
+        
+        if (querySnapshot.empty) {
+            return res.status(404).json({ 
+                success: false,
+                message: "Employee not found with this UID" 
+            });
+        }
+
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        res.json({
+            success: true,
+            message: "Employee profile retrieved successfully",
+            employee: {
+                id: employeeDoc.id,
+                uid: employeeData.uid,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                company: employeeData.company,
+                companyName: employeeData.companyName,
+                location: employeeData.location,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                branch: employeeData.branch,
+                position: employeeData.position,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                roleName: employeeData.roleName,
+                bankName: employeeData.bankName,
+                bankAccountNumber: employeeData.bankAccountNumber,
+                bankHolderName: employeeData.bankHolderName,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                idAddress: employeeData.idAddress,
+                subDistrict: employeeData.subDistrict,
+                district: employeeData.district,
+                province: employeeData.province,
+                postalCode: employeeData.postalCode,
+                idType: employeeData.idType,
+                idCardNumber: employeeData.idCardNumber,
+                nationality: employeeData.nationality,
+                title: employeeData.title,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error in getProfileByUid:", error);
         res.status(500).json({ 
             success: false,
             message: "Internal server error",
