@@ -132,25 +132,17 @@ exports.getEmployeeList = async (req, res) => {
     }
 };
 
-// Employee login with email and password
+// Employee login with email and password (ONLY LOGIN - NO REGISTRATION)
 exports.login = async (req, res) => {
     console.log("Employee login called");
     try {
-        const { email, password, confirmPassword } = req.body;
+        const { email, password } = req.body;
         
         // Validation
-        if (!email || !password || !confirmPassword) {
+        if (!email || !password) {
             return res.status(400).json({ 
                 success: false,
-                message: "Email, password, and confirm password are required" 
-            });
-        }
-
-        // Check if passwords match
-        if (password !== confirmPassword) {
-            return res.status(400).json({ 
-                success: false,
-                message: "Password and confirm password do not match" 
+                message: "Email and password are required" 
             });
         }
 
@@ -159,132 +151,63 @@ exports.login = async (req, res) => {
         const querySnapshot = await employeesRef.where("email", "==", email).get();
         
         if (querySnapshot.empty) {
-            // Employee doesn't exist - REGISTRATION FLOW
-            console.log(`Employee not found with email: ${email} - Starting registration`);
-            
-            // Create new employee record with email and password
-            const newEmployeeData = {
-                email: email,
-                password: password,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                status: "active",
-                role: "employee"
-            };
-
-            // Add new employee to Firestore
-            const newEmployeeRef = await employeesRef.add(newEmployeeData);
-            const newEmployeeDoc = await newEmployeeRef.get();
-            const savedEmployeeData = newEmployeeDoc.data();
-
-            console.log(`New employee registered with email: ${email}`);
-
-            // Return success response for registration
-            res.json({
-                success: true,
-                message: "Registration successful",
-                isRegistration: true,
-                employee: {
-                    id: newEmployeeDoc.id,
-                    email: savedEmployeeData.email,
-                    status: savedEmployeeData.status,
-                    role: savedEmployeeData.role,
-                    createdAt: savedEmployeeData.createdAt,
-                    updatedAt: savedEmployeeData.updatedAt
-                }
+            return res.status(404).json({ 
+                success: false,
+                message: "Employee not found with this email address" 
             });
-
-        } else {
-            // Employee exists - LOGIN FLOW
-            const employeeDoc = querySnapshot.docs[0];
-            const employeeData = employeeDoc.data();
-
-            // Check if employee has a password set
-            if (!employeeData.password) {
-                // First time login - save the password
-                await employeeDoc.ref.update({ 
-                    password: password,
-                    updatedAt: new Date().toISOString()
-                });
-                
-                console.log(`Password saved for existing employee: ${email}`);
-                
-                // Return success response for first-time password setup
-                res.json({
-                    success: true,
-                    message: "Password saved and login successful",
-                    isRegistration: false,
-                    employee: {
-                        id: employeeDoc.id,
-                        authId: employeeData.authId,
-                        nickname: employeeData.nickname,
-                        firstName: employeeData.firstName,
-                        lastName: employeeData.lastName,
-                        email: employeeData.email,
-                        primaryNumber: employeeData.primary_number,
-                        companyName: employeeData.companyName,
-                        locationName: employeeData.locationName,
-                        branchName: employeeData.branchName,
-                        positionName: employeeData.positionName,
-                        status: employeeData.status,
-                        role: employeeData.role,
-                        profileImage: employeeData.profileImage,
-                        has2FA: !!employeeData.secret,
-                        joinDate: employeeData.joinDate,
-                        maritalStatus: employeeData.maritalStatus,
-                        dateOfBirth: employeeData.dateOfBirth,
-                        gender: employeeData.gender,
-                        salary: employeeData.salary,
-                        department: employeeData.department,
-                        createdAt: employeeData.createdAt,
-                        updatedAt: new Date().toISOString()
-                    }
-                });
-
-            } else {
-                // Employee has password - verify it
-                if (employeeData.password !== password) {
-                    return res.status(401).json({ 
-                        success: false,
-                        message: "Invalid password" 
-                    });
-                }
-
-                // Password matches - successful login
-                console.log(`Successful login for employee: ${email}`);
-
-                res.json({
-                    success: true,
-                    message: "Login successful",
-                    isRegistration: false,
-                    employee: {
-                        id: employeeDoc.id,
-                        authId: employeeData.authId,
-                        nickname: employeeData.nickname,
-                        firstName: employeeData.firstName,
-                        lastName: employeeData.lastName,
-                        email: employeeData.email,
-                        primaryNumber: employeeData.primary_number,
-                        companyName: employeeData.companyName,
-                        locationName: employeeData.locationName,
-                        branchName: employeeData.branchName,
-                        positionName: employeeData.positionName,
-                        status: employeeData.status,
-                        role: employeeData.role,
-                        profileImage: employeeData.profileImage,
-                        has2FA: !!employeeData.secret,
-                        joinDate: employeeData.joinDate,
-                        maritalStatus: employeeData.maritalStatus,
-                        dateOfBirth: employeeData.dateOfBirth,
-                        gender: employeeData.gender,
-                        salary: employeeData.salary,
-                        department: employeeData.department,
-                        createdAt: employeeData.createdAt,
-                        updatedAt: employeeData.updatedAt
-                    }
-                });
-            }
         }
+
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        // Check if employee has a password set
+        if (!employeeData.password) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Please register first" 
+            });
+        }
+
+        // Verify password
+        if (employeeData.password !== password) {
+            return res.status(401).json({ 
+                success: false,
+                message: "Invalid password" 
+            });
+        }
+
+        // Password matches - successful login
+        console.log(`Successful login for employee: ${email}`);
+
+        res.json({
+            success: true,
+            message: "Login successful",
+            employee: {
+                id: employeeDoc.id,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt
+            }
+        });
 
     } catch (error) {
         console.error("❌ Error in employee login:", error);
@@ -352,9 +275,9 @@ exports.checkEmail = async (req, res) => {
     }
 };
 
-// Set password for employee
-exports.setPassword = async (req, res) => {
-    console.log("Employee setPassword called");
+// Register employee with email and password (check if email exists, if exists then save)
+exports.register = async (req, res) => {
+    console.log("Employee register called");
     try {
         const { email, password, confirmPassword } = req.body;
         
@@ -381,38 +304,53 @@ exports.setPassword = async (req, res) => {
         if (querySnapshot.empty) {
             return res.status(404).json({ 
                 success: false,
-                message: "Employee not found with this email address" 
+                message: "Don't have data" 
             });
         }
 
         const employeeDoc = querySnapshot.docs[0];
         const employeeData = employeeDoc.data();
 
-        // Update password
+        // Update password for existing employee (whether they have password or not)
         await employeeDoc.ref.update({ 
             password: password,
             updatedAt: new Date().toISOString()
         });
         
-        console.log(`Password set for employee: ${email}`);
+        console.log(`Password updated for employee: ${email}`);
 
         res.json({
             success: true,
-            message: "Password set successfully",
+            message: "Password updated successfully",
             employee: {
                 id: employeeDoc.id,
-                email: employeeData.email,
+                authId: employeeData.authId,
                 nickname: employeeData.nickname,
                 firstName: employeeData.firstName,
                 lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                positionName: employeeData.positionName,
                 status: employeeData.status,
                 role: employeeData.role,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
                 updatedAt: new Date().toISOString()
             }
         });
 
     } catch (error) {
-        console.error("❌ Error in employee setPassword:", error);
+        console.error("❌ Error in employee register:", error);
         res.status(500).json({ 
             success: false,
             message: "Internal server error",
