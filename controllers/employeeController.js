@@ -546,9 +546,9 @@ exports.getEmployeeLeaveList = async (req, res) => {
             });
         }
 
-        // Get employee leave records filtered by UID
+        // Get employee leave records filtered by employeeId (login user UID)
         const employeeLeaveRef = db.collection("employee-leave");
-        const querySnapshot = await employeeLeaveRef.where("uid", "==", uid).get();
+        const querySnapshot = await employeeLeaveRef.where("employeeId", "==", uid).get();
 
         if (querySnapshot.empty) {
             return res.json({
@@ -565,6 +565,7 @@ exports.getEmployeeLeaveList = async (req, res) => {
             leaveRecords.push({
                 id: doc.id,
                 uid: leaveData.uid,
+                employeeId: leaveData.employeeId,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
                 startDate: leaveData.startDate,
@@ -606,7 +607,7 @@ exports.createLeaveRequest = async (req, res) => {
     console.log("Create leave request called");
     try {
         const { 
-            uid, 
+            employeeId, 
             leaveType, 
             leaveTypeName, 
             requestType, // 'daily' or 'hourly'
@@ -621,10 +622,10 @@ exports.createLeaveRequest = async (req, res) => {
         } = req.body;
         
         // Validation
-        if (!uid || !leaveType || !leaveTypeName || !requestType || !reason) {
+        if (!employeeId || !leaveType || !leaveTypeName || !requestType || !reason) {
             return res.status(400).json({ 
                 success: false,
-                message: "UID, leaveType, leaveTypeName, requestType, and reason are required" 
+                message: "EmployeeId, leaveType, leaveTypeName, requestType, and reason are required" 
             });
         }
 
@@ -665,9 +666,15 @@ exports.createLeaveRequest = async (req, res) => {
             totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
         }
 
+        // Generate unique leave request ID and UID
+        const leaveRequestId = `LR-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+        const uid = `${Date.now().toString(16)}-${Math.random().toString(16).substr(2, 4)}-${Math.random().toString(16).substr(2, 4)}-${Math.random().toString(16).substr(2, 4)}-${Math.random().toString(16).substr(2, 12)}`;
+
         // Create leave request data
         const leaveRequestData = {
+            id: leaveRequestId,
             uid: uid,
+            employeeId: employeeId,
             leaveType: leaveType,
             leaveTypeName: leaveTypeName,
             requestType: requestType,
@@ -700,14 +707,15 @@ exports.createLeaveRequest = async (req, res) => {
         const leaveRequestDoc = await leaveRequestRef.get();
         const savedLeaveRequest = leaveRequestDoc.data();
 
-        console.log(`Leave request created for employee: ${uid}`);
+        console.log(`Leave request created for employee: ${employeeId}`);
 
         res.json({
             success: true,
             message: "Leave request created successfully",
             leaveRequest: {
-                id: leaveRequestDoc.id,
+                id: savedLeaveRequest.id,
                 uid: savedLeaveRequest.uid,
+                employeeId: savedLeaveRequest.employeeId,
                 leaveType: savedLeaveRequest.leaveType,
                 leaveTypeName: savedLeaveRequest.leaveTypeName,
                 requestType: savedLeaveRequest.requestType,
