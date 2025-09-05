@@ -18,5 +18,8 @@ router.get("/stats", employeeController.getEmployeeStats);
 router.get("/search", employeeController.searchEmployees);
 router.get("/filter-options", employeeController.getEmployeeFilterOptions);
 
+// Check In/Out routes
+router.post("/check-in-out", employeeController.checkInOut);
+router.get("/check-history/:employeeId", employeeController.getCheckInOutHistory);
 
 module.exports = router;

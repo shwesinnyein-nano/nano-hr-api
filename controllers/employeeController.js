@@ -1053,3 +1053,147 @@ exports.getEmployeeFilterOptions = async (req, res) => {
         });
     }
 };
+
+// Check In/Out API
+exports.checkInOut = async (req, res) => {
+    try {
+        const { employeeId, employeeName, type, location } = req.body; // type: 'checkin' or 'checkout'
+        
+        // Validate required fields
+        if (!employeeId || !employeeName || !type || !location) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing required fields: employeeId, employeeName, type, location"
+            });
+        }
+
+        // Validate type
+        if (type !== 'checkin' && type !== 'checkout') {
+            return res.status(400).json({
+                success: false,
+                message: "Type must be 'checkin' or 'checkout'"
+            });
+        }
+
+        // Generate unique ID and timestamp
+        const uid = uuidv4();
+        const currentDate = new Date();
+        const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const timeString = currentDate.toTimeString().split(' ')[0]; // HH:MM:SS format
+
+        // Create check in/out record
+        const checkRecord = {
+            id: uid,
+            uid: uid,
+            employeeId: employeeId,
+            employeeName: employeeName,
+            type: type, // 'checkin' or 'checkout'
+            location: location,
+            date: dateString,
+            time: timeString,
+            timestamp: currentDate.toISOString(),
+            createdAt: currentDate.toISOString(),
+            updatedAt: currentDate.toISOString()
+        };
+
+        // Save to Firestore
+        const checkRef = db.collection("employee-checkinout").doc(uid);
+        await checkRef.set(checkRecord);
+
+        res.status(200).json({
+            success: true,
+            message: `${type === 'checkin' ? 'Check In' : 'Check Out'} recorded successfully`,
+            data: {
+                id: uid,
+                employeeId: employeeId,
+                employeeName: employeeName,
+                type: type,
+                location: location,
+                date: dateString,
+                time: timeString,
+                timestamp: currentDate.toISOString()
+            }
+        });
+
+    } catch (error) {
+        console.error("Check in/out error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Get employee check in/out history
+exports.getCheckInOutHistory = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        const { startDate, endDate, limit = 50 } = req.query;
+
+        if (!employeeId) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID is required"
+            });
+        }
+
+        let query = db.collection("employee-checkinout")
+            .where("employeeId", "==", employeeId)
+            .orderBy("timestamp", "desc")
+            .limit(parseInt(limit));
+
+        // Add date range filter if provided
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999); // End of day
+            
+            query = query.where("timestamp", ">=", start.toISOString())
+                        .where("timestamp", "<=", end.toISOString());
+        }
+
+        const snapshot = await query.get();
+        const records = [];
+
+        snapshot.forEach(doc => {
+            records.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Check in/out history retrieved successfully",
+            count: records.length,
+            data: records
+        });
+
+    } catch (error) {
+        console.error("Get check in/out history error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+module.exports = {
+    checkEmployee,
+    getEmployeeList,
+    getEmployeeListInternal,
+    getEmployeeStats,
+    searchEmployees,
+    login,
+    register,
+    checkEmail,
+    getProfileByUid,
+    getLeaveSettings,
+    getEmployeeLeaveList,
+    createLeaveRequest,
+    getEmployeeFilterOptions,
+    checkInOut,
+    getCheckInOutHistory
+};
