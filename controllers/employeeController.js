@@ -1116,7 +1116,7 @@ const checkInOut = async (req, res) => {
         };
 
         // Save to Firestore
-        const checkRef = db.collection("employee-checkinout").doc(uid);
+        const checkRef = db.collection("employee-attendance").doc(uid);
         await checkRef.set(checkRecord);
 
         res.status(200).json({
@@ -1168,7 +1168,7 @@ const getCheckInOutHistory = async (req, res) => {
         const limitNum = limit ? parseInt(limit) : 50;
         const validLimit = isNaN(limitNum) || limitNum <= 0 ? 50 : Math.min(limitNum, 100); // Max 100 records
 
-        let query = db.collection("employee-checkinout")
+        let query = db.collection("employee-attendance")
             .where("employeeId", "==", employeeId)
             .limit(validLimit);
 
