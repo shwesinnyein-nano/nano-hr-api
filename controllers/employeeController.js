@@ -1155,7 +1155,7 @@ const checkInOut = async (req, res) => {
 const getCheckInOutHistory = async (req, res) => {
     try {
         const { employeeId } = req.params;
-        const { startDate, endDate, limit = 50 } = req.query;
+        const { startDate, endDate, limit } = req.query;
 
         if (!employeeId) {
             return res.status(400).json({
@@ -1164,9 +1164,13 @@ const getCheckInOutHistory = async (req, res) => {
             });
         }
 
+        // Parse limit with proper validation
+        const limitNum = limit ? parseInt(limit) : 50;
+        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 50 : Math.min(limitNum, 100); // Max 100 records
+
         let query = db.collection("employee-checkinout")
             .where("employeeId", "==", employeeId)
-            .limit(parseInt(limit));
+            .limit(validLimit);
 
         // Note: We'll sort in memory to avoid Firestore index requirements
         // Add date range filter if provided
