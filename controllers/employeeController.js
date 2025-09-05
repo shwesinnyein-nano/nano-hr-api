@@ -1109,8 +1109,7 @@ const checkInOut = async (req, res) => {
             branchName: branchName,
             type: type, // 'checkin' or 'checkout'
             date: dateString,
-            checkInAt: checkInAt,
-            checkOutAt: checkOutAt,
+            time: timeString,
             timestamp: currentDate.toISOString(),
             createdAt: currentDate.toISOString(),
             updatedAt: currentDate.toISOString()
