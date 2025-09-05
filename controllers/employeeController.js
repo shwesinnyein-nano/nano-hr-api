@@ -1092,9 +1092,7 @@ const checkInOut = async (req, res) => {
         const uid = uuidv4();
         const currentDate = new Date();
         const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
-        const timeString = currentDate.toTimeString().split(' ')[0]; // HH:MM:SS format
-
-        const time = type === 'checkin' ? new Date().toTimeString().split(' ')[0] :  new Date().toTimeString().split(' ')[0];
+        
         // Create check in/out record
         const checkRecord = {
             id: uid,
@@ -1111,8 +1109,8 @@ const checkInOut = async (req, res) => {
             branchName: branchName,
             type: type, // 'checkin' or 'checkout'
             date: dateString,
-            checkInAt: type === 'checkin' ? time : null,
-            checkOutAt: type === 'checkout' ? time : null,
+            checkInAt: checkInAt,
+            checkOutAt: checkOutAt,
             timestamp: currentDate.toISOString(),
             createdAt: currentDate.toISOString(),
             updatedAt: currentDate.toISOString()
@@ -1139,8 +1137,8 @@ const checkInOut = async (req, res) => {
                 branchName: branchName,
                 type: type,
                 date: dateString,
-                checkInAt: type === 'checkin' ? time : null,
-                checkOutAt: type === 'checkout' ? time : null,
+                checkInAt: checkInAt,
+                checkOutAt: checkOutAt,
                 timestamp: currentDate.toISOString()
             }
         });
@@ -1277,6 +1275,63 @@ const getAllAttendanceHistory = async (req, res) => {
     }
 };
 
+// Get attendance by employee ID and specific date
+const getAttendanceByEmployeeAndDate = async (req, res) => {
+    try {
+        const { employeeId, date } = req.params;
+        const { limit } = req.query;
+
+        if (!employeeId || !date) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID and date are required"
+            });
+        }
+
+        // Parse limit with proper validation
+        const limitNum = limit ? parseInt(limit) : 50;
+        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 50 : Math.min(limitNum, 100);
+
+        let query = db.collection("employee-attendance")
+            .where("employeeId", "==", employeeId)
+            .where("date", "==", date);
+
+        const snapshot = await query.get();
+        const records = [];
+
+        snapshot.forEach(doc => {
+            records.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Sort by timestamp in descending order (newest first)
+        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Apply limit AFTER sorting
+        const limitedRecords = records.slice(0, validLimit);
+
+        res.status(200).json({
+            success: true,
+            message: "Attendance records retrieved successfully",
+            count: limitedRecords.length,
+            totalRecords: records.length,
+            date: date,
+            employeeId: employeeId,
+            data: limitedRecords
+        });
+
+    } catch (error) {
+        console.error("Get attendance by employee and date error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     checkEmployee,
     getEmployeeList,
@@ -1293,5 +1348,6 @@ module.exports = {
     getEmployeeFilterOptions,
     checkInOut,
     getCheckInOutHistory,
-    getAllAttendanceHistory
+    getAllAttendanceHistory,
+    getAttendanceByEmployeeAndDate
 };

@@ -22,5 +22,6 @@ router.get("/filter-options", employeeController.getEmployeeFilterOptions);
 router.post("/check-in-out", employeeController.checkInOut);
 router.get("/attendance-history/:employeeId", employeeController.getCheckInOutHistory);
 router.get("/attendance-history", employeeController.getAllAttendanceHistory);
+router.get("/attendance/:employeeId/:date", employeeController.getAttendanceByEmployeeAndDate);
 
 module.exports = router;
