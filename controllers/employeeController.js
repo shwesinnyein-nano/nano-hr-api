@@ -1169,10 +1169,8 @@ const getCheckInOutHistory = async (req, res) => {
         const validLimit = isNaN(limitNum) || limitNum <= 0 ? 50 : Math.min(limitNum, 100); // Max 100 records
 
         let query = db.collection("employee-attendance")
-            .where("employeeId", "==", employeeId)
-            .limit(validLimit);
+            .where("employeeId", "==", employeeId);
 
-        // Note: We'll sort in memory to avoid Firestore index requirements
         // Add date range filter if provided
         if (startDate && endDate) {
             const start = new Date(startDate);
@@ -1196,11 +1194,15 @@ const getCheckInOutHistory = async (req, res) => {
         // Sort by timestamp in descending order (newest first)
         records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+        // Apply limit AFTER sorting to get the most recent records
+        const limitedRecords = records.slice(0, validLimit);
+
         res.status(200).json({
             success: true,
             message: "Check in/out history retrieved successfully",
-            count: records.length,
-            data: records
+            count: limitedRecords.length,
+            totalRecords: records.length,
+            data: limitedRecords
         });
 
     } catch (error) {
