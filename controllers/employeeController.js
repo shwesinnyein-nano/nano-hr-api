@@ -1166,9 +1166,9 @@ const getCheckInOutHistory = async (req, res) => {
 
         let query = db.collection("employee-checkinout")
             .where("employeeId", "==", employeeId)
-            .orderBy("timestamp", "desc")
             .limit(parseInt(limit));
 
+        // Note: We'll sort in memory to avoid Firestore index requirements
         // Add date range filter if provided
         if (startDate && endDate) {
             const start = new Date(startDate);
@@ -1188,6 +1188,9 @@ const getCheckInOutHistory = async (req, res) => {
                 ...doc.data()
             });
         });
+
+        // Sort by timestamp in descending order (newest first)
+        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
         res.status(200).json({
             success: true,
