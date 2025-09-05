@@ -1094,6 +1094,7 @@ const checkInOut = async (req, res) => {
         const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
         const timeString = currentDate.toTimeString().split(' ')[0]; // HH:MM:SS format
 
+        const time = type === 'checkin' ? new Date().toTimeString().split(' ')[0] :  new Date().toTimeString().split(' ')[0];
         // Create check in/out record
         const checkRecord = {
             id: uid,
@@ -1110,7 +1111,8 @@ const checkInOut = async (req, res) => {
             branchName: branchName,
             type: type, // 'checkin' or 'checkout'
             date: dateString,
-            time: timeString,
+            checkInAt: type === 'checkin' ? time : null,
+            checkOutAt: type === 'checkout' ? time : null,
             timestamp: currentDate.toISOString(),
             createdAt: currentDate.toISOString(),
             updatedAt: currentDate.toISOString()
@@ -1137,7 +1139,8 @@ const checkInOut = async (req, res) => {
                 branchName: branchName,
                 type: type,
                 date: dateString,
-                time: timeString,
+                checkInAt: type === 'checkin' ? time : null,
+                checkOutAt: type === 'checkout' ? time : null,
                 timestamp: currentDate.toISOString()
             }
         });
