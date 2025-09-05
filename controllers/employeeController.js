@@ -1112,7 +1112,7 @@ const checkInOut = async (req, res) => {
             companyName: companyName,
             locationName: locationName,
             location: location,
-            branch: branch,
+            branch: branch, 
             branchName: branchName,
             type: type, // 'checkin' or 'checkout'
             date: dateString,
