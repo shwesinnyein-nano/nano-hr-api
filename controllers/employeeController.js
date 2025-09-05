@@ -113,7 +113,7 @@ const checkEmployee = async (req, res) => {
 }
 
 // HTTP endpoint that uses the internal function
-exports.getEmployeeList = async (req, res) => {
+const getEmployeeList = async (req, res) => {
     console.log("getEmployeeList HTTP endpoint called");
     try {
         const result = await getEmployeeListInternal();
@@ -134,7 +134,7 @@ exports.getEmployeeList = async (req, res) => {
 };
 
 // Employee login with email and password (ONLY LOGIN - NO REGISTRATION)
-exports.login = async (req, res) => {
+const login = async (req, res) => {
     console.log("Employee login called");
     try {
         const { email, password } = req.body;
@@ -221,7 +221,7 @@ exports.login = async (req, res) => {
 };
 
 // Check if email exists in employee table
-exports.checkEmail = async (req, res) => {
+const checkEmail = async (req, res) => {
     console.log("Employee checkEmail called");
     try {
         const { email } = req.body;
@@ -304,7 +304,7 @@ exports.checkEmail = async (req, res) => {
 };
 
 // Register employee with email and password (check if email exists, if exists then save)
-exports.register = async (req, res) => {
+const register = async (req, res) => {
     console.log("Employee register called");
     try {
         const { email, password, confirmPassword } = req.body;
@@ -400,7 +400,7 @@ exports.register = async (req, res) => {
 };
 
 // Get employee profile by UID
-exports.getProfileByUid = async (req, res) => {
+const getProfileByUid = async (req, res) => {
     console.log("Get employee profile by UID called");
     try {
         const { uid } = req.params;
@@ -484,7 +484,7 @@ exports.getProfileByUid = async (req, res) => {
 };
 
 // Get leave settings list
-exports.getLeaveSettings = async (req, res) => {
+const getLeaveSettings = async (req, res) => {
     console.log("Get leave settings called");
     try {
         const leaveSettingsRef = db.collection("leave-settings");
@@ -535,7 +535,7 @@ exports.getLeaveSettings = async (req, res) => {
 };
 
 // Get employee leave list filtered by UID
-exports.getEmployeeLeaveList = async (req, res) => {
+const getEmployeeLeaveList = async (req, res) => {
     console.log("Get employee leave list called");
     try {
         const { uid } = req.params;
@@ -605,7 +605,7 @@ exports.getEmployeeLeaveList = async (req, res) => {
 };
 
 // Create leave request
-exports.createLeaveRequest = async (req, res) => {
+const createLeaveRequest = async (req, res) => {
     console.log("Create leave request called");
     try {
         const { 
@@ -754,10 +754,10 @@ exports.createLeaveRequest = async (req, res) => {
 };
 
 // Export the internal function so it can be used by other parts of the API
-exports.getEmployeeListInternal = getEmployeeListInternal;
+// getEmployeeListInternal is already defined as const above
 
 // Example: Function that uses the internal getEmployeeList function
-exports.getEmployeeStats = async (req, res) => {
+const getEmployeeStats = async (req, res) => {
     console.log("getEmployeeStats called - this will use getEmployeeListInternal");
     try {
         // Call the internal function from within the API
@@ -811,7 +811,7 @@ exports.getEmployeeStats = async (req, res) => {
 };
 
 // Search and filter employees API
-exports.searchEmployees = async (req, res) => {
+const searchEmployees = async (req, res) => {
     console.log("searchEmployees called with query:", req.query);
     try {
         const {
@@ -988,7 +988,7 @@ exports.searchEmployees = async (req, res) => {
 };
 
 // Get employee filter options (for dropdowns, etc.)
-exports.getEmployeeFilterOptions = async (req, res) => {
+const getEmployeeFilterOptions = async (req, res) => {
     console.log("getEmployeeFilterOptions called");
     try {
         const employeesRef = db.collection("employees");
@@ -1055,7 +1055,7 @@ exports.getEmployeeFilterOptions = async (req, res) => {
 };
 
 // Check In/Out API
-exports.checkInOut = async (req, res) => {
+const checkInOut = async (req, res) => {
     try {
         const { 
             employeeId, 
@@ -1152,7 +1152,7 @@ exports.checkInOut = async (req, res) => {
 };
 
 // Get employee check in/out history
-exports.getCheckInOutHistory = async (req, res) => {
+const getCheckInOutHistory = async (req, res) => {
     try {
         const { employeeId } = req.params;
         const { startDate, endDate, limit = 50 } = req.query;
