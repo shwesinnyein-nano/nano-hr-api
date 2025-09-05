@@ -1117,8 +1117,8 @@ const checkInOut = async (req, res) => {
             type: type, // 'checkin' or 'checkout'
             date: dateString, // Keep original UTC date
             time: localTimeString, // Use local time HH:MM:SS only
-            checkInAt: checkInAt ? checkInAt : null,
-            checkOutAt: checkOutAt ? checkOutAt : null,
+            checkInAt: type === 'checkin' ? localTimeString : null,
+            checkOutAt: type === 'checkout' ? localTimeString : null,
             timestamp: currentDate.toISOString(), // Keep UTC for consistency
             createdAt: currentDate.toISOString(),
             updatedAt: currentDate.toISOString()
@@ -1145,8 +1145,8 @@ const checkInOut = async (req, res) => {
                 branchName: branchName,
                 type: type,
                 date: dateString,
-                checkInAt: checkInAt,
-                checkOutAt: checkOutAt,
+                checkInAt: type === 'checkin' ? localTimeString : null,
+                checkOutAt: type === 'checkout' ? localTimeString : null,
                 timestamp: currentDate.toISOString()
             }
         });
