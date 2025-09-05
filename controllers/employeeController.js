@@ -1056,6 +1056,7 @@ const getEmployeeFilterOptions = async (req, res) => {
 
 // Check In/Out API
 const checkInOut = async (req, res) => {
+    console.log("Check In/Out called", req.body);
     try {
         const { 
             employeeId, 
@@ -1153,6 +1154,7 @@ const checkInOut = async (req, res) => {
 
 // Get employee check in/out history
 const getCheckInOutHistory = async (req, res) => {
+    console.log("Get check in/out history called", req.params, req.query);
     try {
         const { employeeId } = req.params;
         const { startDate, endDate, limit } = req.query;
