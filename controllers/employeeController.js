@@ -1094,11 +1094,11 @@ const checkInOut = async (req, res) => {
         const uid = uuidv4();
         const currentDate = new Date();
         const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
-        //const timeString = currentDate.toTimeString().split(' ')[0]; // HH:MM:SS format
         
-        // Define checkInAt and checkOutAt based on type
-        // const checkInAt = type === 'checkin' ? currentDate.toISOString() : null;
-        // const checkOutAt = type === 'checkout' ? currentDate.toISOString() : null;
+        // Get local time (Thai timezone UTC+7)
+        const thaiOffset = 7 * 60; // 7 hours in minutes
+        const localDate = new Date(currentDate.getTime() + (thaiOffset * 60 * 1000));
+        const localTimeString = localDate.toTimeString().split(' ')[0]; // HH:MM:SS format only
         
         // Create check in/out record
         const checkRecord = {
@@ -1115,10 +1115,11 @@ const checkInOut = async (req, res) => {
             branch: branch, 
             branchName: branchName,
             type: type, // 'checkin' or 'checkout'
-            date: dateString,
+            date: dateString, // Keep original UTC date
+            time: localTimeString, // Use local time HH:MM:SS only
             checkInAt: checkInAt ? checkInAt : null,
             checkOutAt: checkOutAt ? checkOutAt : null,
-            timestamp: currentDate.toISOString(),
+            timestamp: currentDate.toISOString(), // Keep UTC for consistency
             createdAt: currentDate.toISOString(),
             updatedAt: currentDate.toISOString()
         };
