@@ -1215,6 +1215,61 @@ const getCheckInOutHistory = async (req, res) => {
     }
 };
 
+// Get ALL attendance history (for all employees)
+const getAllAttendanceHistory = async (req, res) => {
+    try {
+        const { startDate, endDate, limit } = req.query;
+
+        // Parse limit with proper validation
+        const limitNum = limit ? parseInt(limit) : 100;
+        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 500); // Max 500 records for all employees
+
+        let query = db.collection("employee-attendance");
+
+        // Add date range filter if provided
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999); // End of day
+            
+            query = query.where("timestamp", ">=", start.toISOString())
+                        .where("timestamp", "<=", end.toISOString());
+        }
+
+        const snapshot = await query.get();
+        const records = [];
+
+        snapshot.forEach(doc => {
+            records.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Sort by timestamp in descending order (newest first)
+        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Apply limit AFTER sorting to get the most recent records
+        const limitedRecords = records.slice(0, validLimit);
+
+        res.status(200).json({
+            success: true,
+            message: "All attendance history retrieved successfully",
+            count: limitedRecords.length,
+            totalRecords: records.length,
+            data: limitedRecords
+        });
+
+    } catch (error) {
+        console.error("Get all attendance history error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     checkEmployee,
     getEmployeeList,
@@ -1230,5 +1285,6 @@ module.exports = {
     createLeaveRequest,
     getEmployeeFilterOptions,
     checkInOut,
-    getCheckInOutHistory
+    getCheckInOutHistory,
+    getAllAttendanceHistory
 };
