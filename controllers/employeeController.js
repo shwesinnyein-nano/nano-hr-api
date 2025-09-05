@@ -76,7 +76,7 @@ const getEmployeeListInternal = async () => {
     }
 };
 
-exports.checkEmployee = async (req, res) => {
+const checkEmployee = async (req, res) => {
     console.log("check employee,", req.body)
     try {
         const { mobileNumber } = req.body;
