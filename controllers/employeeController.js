@@ -1057,7 +1057,19 @@ exports.getEmployeeFilterOptions = async (req, res) => {
 // Check In/Out API
 exports.checkInOut = async (req, res) => {
     try {
-        const { employeeId, employeeName, type, location } = req.body; // type: 'checkin' or 'checkout'
+        const { 
+            employeeId, 
+            employeeName, 
+            position, 
+            positionName, 
+            company, 
+            companyName, 
+            locationName, 
+            location, 
+            branch, 
+            branchName, 
+            type 
+        } = req.body; // type: 'checkin' or 'checkout'
         
         // Validate required fields
         if (!employeeId || !employeeName || !type || !location) {
@@ -1087,8 +1099,15 @@ exports.checkInOut = async (req, res) => {
             uid: uid,
             employeeId: employeeId,
             employeeName: employeeName,
-            type: type, // 'checkin' or 'checkout'
+            position: position,
+            positionName: positionName,
+            company: company,
+            companyName: companyName,
+            locationName: locationName,
             location: location,
+            branch: branch,
+            branchName: branchName,
+            type: type, // 'checkin' or 'checkout'
             date: dateString,
             time: timeString,
             timestamp: currentDate.toISOString(),
@@ -1107,8 +1126,15 @@ exports.checkInOut = async (req, res) => {
                 id: uid,
                 employeeId: employeeId,
                 employeeName: employeeName,
-                type: type,
+                position: position,
+                positionName: positionName,
+                company: company,
+                companyName: companyName,
+                locationName: locationName,
                 location: location,
+                branch: branch,
+                branchName: branchName,
+                type: type,
                 date: dateString,
                 time: timeString,
                 timestamp: currentDate.toISOString()
