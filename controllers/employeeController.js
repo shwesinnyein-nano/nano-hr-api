@@ -1141,6 +1141,7 @@ const checkInOut = async (req, res) => {
                 timestamp: currentDate.toISOString()
             }
         });
+        console.log("Check in/out recorded successfully", checkRecord);
 
     } catch (error) {
         console.error("Check in/out error:", error);
@@ -1206,6 +1207,7 @@ const getCheckInOutHistory = async (req, res) => {
             totalRecords: records.length,
             data: limitedRecords
         });
+        console.log("limitedRecords", limitedRecords);
 
     } catch (error) {
         console.error("Get check in/out history error:", error);
