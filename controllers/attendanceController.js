@@ -524,10 +524,22 @@ const getTodayAttendanceStatus = async (req, res) => {
                 canCheckOut: true,
                 record: {
                     id: snapshot.docs[0].id,
+                    uid: snapshot.docs[0].id,
+                    employeeId: record.employeeId,
+                    employeeName: record.employeeName,
+                    location: record.location,
+                    branch: record.branch,
+                    branchName: record.branchName,
+                    type: record.type,
                     checkInAt: record.checkInAt,
                     checkOutAt: record.checkOutAt,
                     date: record.date,
-                    time: record.time
+                    time: record.time,
+                    timestamp: record.timestamp,
+                    createdAt: record.createdAt,
+                    updatedAt: record.updatedAt,
+                    isAutoCheckout: record.isAutoCheckout,
+                   
                 }
             });
         } else if (record.type === 'checkout') {
@@ -542,10 +554,22 @@ const getTodayAttendanceStatus = async (req, res) => {
                 canCheckOut: false,
                 record: {
                     id: snapshot.docs[0].id,
+                    uid: snapshot.docs[0].id,
+                    employeeId: record.employeeId,
+                    employeeName: record.employeeName,
+                    location: record.location,
+                    branch: record.branch,
+                    branchName: record.branchName,
+                    type: record.type,
                     checkInAt: record.checkInAt,
                     checkOutAt: record.checkOutAt,
                     date: record.date,
-                    time: record.time
+                    time: record.time,
+                    timestamp: record.timestamp,
+                    createdAt: record.createdAt,
+                    updatedAt: record.updatedAt,
+                    isAutoCheckout: record.isAutoCheckout,
+                   
                 }
             });
         }
@@ -561,7 +585,20 @@ const getTodayAttendanceStatus = async (req, res) => {
             canCheckOut: false,
             record: {
                 id: snapshot.docs[0].id,
+                uid: snapshot.docs[0].id,
+                employeeId: record.employeeId,
+                employeeName: record.employeeName,
+                location: record.location,
+                branch: record.branch,
+                branchName: record.branchName,
+                type: record.type,
+                timestamp: record.timestamp,
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt,
+                isAutoCheckout: record.isAutoCheckout,
                 ...record
+               
+               
             }
         });
 
