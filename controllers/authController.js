@@ -432,6 +432,190 @@ exports.loginWithEmailPassword = async (req, res) => {
     }
 };
 
+// NEW LOGIN ENDPOINT - Email and Password Login (for existing users only)
+exports.loginUser = async (req, res) => {
+    console.log("loginUser called");
+    try {
+        const { email, password } = req.body;
+        
+        // Validation
+        if (!email || !password) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email and password are required" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            // Employee doesn't exist - Show register message
+            return res.status(404).json({ 
+                success: false,
+                message: "You need to register first" 
+            });
+        }
+
+        // Employee exists - LOGIN FLOW
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        // Check if employee has a password set
+        if (!employeeData.password) {
+            return res.status(400).json({ 
+                success: false,
+                message: "No password set for this account. Please contact administrator." 
+            });
+        }
+
+        // Verify password
+        if (employeeData.password !== password) {
+            return res.status(401).json({ 
+                success: false,
+                message: "Invalid password" 
+            });
+        }
+
+        // Password matches - successful login
+        console.log(`Successful login for employee: ${email}`);
+
+        res.json({
+            success: true,
+            message: "Login successful",
+            employee: {
+                id: employeeDoc.id,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error in loginUser:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// REGISTER ENDPOINT - Email and Password Registration (for existing employees only)
+exports.registerUser = async (req, res) => {
+    console.log("registerUser called");
+    try {
+        const { email, password, confirmPassword } = req.body;
+        
+        // Validation
+        if (!email || !password || !confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email, password, and confirm password are required" 
+            });
+        }
+
+        // Check if passwords match
+        if (password !== confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Password and confirm password do not match" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            // Employee doesn't exist in system - Show HR contact message
+            return res.status(404).json({ 
+                success: false,
+                message: "Your email address was not found in system, please contact to your HR" 
+            });
+        }
+
+        // Employee exists in system - REGISTRATION FLOW
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        // Check if employee already has a password set
+        if (employeeData.password) {
+            return res.status(409).json({ 
+                success: false,
+                message: "Account already registered. Please use login instead." 
+            });
+        }
+
+        // Save password for existing employee
+        await employeeDoc.ref.update({ 
+            password: password,
+            updatedAt: new Date().toISOString()
+        });
+        
+        console.log(`Password saved for existing employee: ${email}`);
+
+        // Return success response for registration
+        res.json({
+            success: true,
+            message: "Registration successful",
+            employee: {
+                id: employeeDoc.id,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: new Date().toISOString()
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error in registerUser:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 // Check if email exists in employee table
 exports.checkEmail = async (req, res) => {
     console.log("checkEmail called");
