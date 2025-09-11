@@ -3,7 +3,7 @@ const qrcode = require("qrcode");
 const { v4: uuidv4 } = require('uuid');
 const { admin, db } = require("../config/firebaseConfig");
 
-// Internal function to get employee list (can be called from other parts of the API)
+
 const getEmployeeListInternal = async () => {
     console.log("getEmployeeListInternal called");
     try {
@@ -112,7 +112,6 @@ const checkEmployee = async (req, res) => {
     }
 }
 
-// HTTP endpoint that uses the internal function
 const getEmployeeList = async (req, res) => {
     console.log("getEmployeeList HTTP endpoint called");
     try {
@@ -133,7 +132,7 @@ const getEmployeeList = async (req, res) => {
     }
 };
 
-// Employee login with email and password (ONLY LOGIN - NO REGISTRATION)
+
 const login = async (req, res) => {
     console.log("Employee login called");
     try {
@@ -220,7 +219,6 @@ const login = async (req, res) => {
     }
 };
 
-// Check if email exists in employee table
 const checkEmail = async (req, res) => {
     console.log("Employee checkEmail called");
     try {
@@ -604,7 +602,7 @@ const getEmployeeLeaveList = async (req, res) => {
     }
 };
 
-// Create leave request
+
 const createLeaveRequest = async (req, res) => {
     console.log("Create leave request called");
     try {
@@ -753,10 +751,7 @@ const createLeaveRequest = async (req, res) => {
     }
 };
 
-// Export the internal function so it can be used by other parts of the API
-// getEmployeeListInternal is already defined as const above
 
-// Example: Function that uses the internal getEmployeeList function
 const getEmployeeStats = async (req, res) => {
     console.log("getEmployeeStats called - this will use getEmployeeListInternal");
     try {
@@ -1353,9 +1348,5 @@ module.exports = {
     getLeaveSettings,
     getEmployeeLeaveList,
     createLeaveRequest,
-    getEmployeeFilterOptions,
-    checkInOut,
-    getCheckInOutHistory,
-    getAllAttendanceHistory,
-    getAttendanceByEmployeeAndDate
+    getEmployeeFilterOptions
 };

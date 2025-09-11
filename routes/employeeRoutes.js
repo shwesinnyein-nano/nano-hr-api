@@ -18,10 +18,6 @@ router.get("/stats", employeeController.getEmployeeStats);
 router.get("/search", employeeController.searchEmployees);
 router.get("/filter-options", employeeController.getEmployeeFilterOptions);
 
-// Attendance routes
-router.post("/check-in-out", employeeController.checkInOut);
-router.get("/attendance-history/:employeeId", employeeController.getCheckInOutHistory);
-router.get("/attendance-history", employeeController.getAllAttendanceHistory);
-router.get("/attendance/:employeeId/:date", employeeController.getAttendanceByEmployeeAndDate);
+// Attendance routes moved to /attendance
 
 module.exports = router;
