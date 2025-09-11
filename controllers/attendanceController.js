@@ -203,9 +203,6 @@ const getCheckInOutHistory = async (req, res) => {
                 .where("date", "<=", endDate);
         }
 
-        // Order by timestamp descending (newest first)
-        query = query.orderBy("timestamp", "desc");
-
         const snapshot = await query.get();
         
         if (snapshot.empty) {
