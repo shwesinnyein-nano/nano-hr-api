@@ -477,6 +477,7 @@ const checkAutoCheckInNeeded = async (req, res) => {
 const getTodayAttendanceStatus = async (req, res) => {
     try {
         const { employeeId } = req.params;
+        console.log("getTodayAttendanceStatus", req.params);
         
         if (!employeeId) {
             return res.status(400).json({
@@ -564,6 +565,7 @@ const getTodayAttendanceStatus = async (req, res) => {
             }
         });
 
+        console.log("getTodayAttendanceStatus responxe", res.json);
     } catch (error) {
         console.error("Get today attendance status error:", error);
         res.status(500).json({
