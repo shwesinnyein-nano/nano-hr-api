@@ -196,13 +196,6 @@ const getCheckInOutHistory = async (req, res) => {
         let query = db.collection("employee-attendance")
             .where("employeeId", "==", employeeId);
 
-        // Add date range filter if provided
-        if (startDate && endDate) {
-            query = query
-                .where("date", ">=", startDate)
-                .where("date", "<=", endDate);
-        }
-
         const snapshot = await query.get();
         
         if (snapshot.empty) {
