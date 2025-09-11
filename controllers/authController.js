@@ -466,7 +466,7 @@ exports.loginUser = async (req, res) => {
         if (!employeeData.password) {
             return res.status(400).json({ 
                 success: false,
-                message: "No password set for this account. Please contact administrator." 
+                message: "You need to register first" 
             });
         }
 
