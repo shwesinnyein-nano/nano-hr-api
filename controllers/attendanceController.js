@@ -43,7 +43,6 @@ const checkInOut = async (req, res) => {
         const existingRecordQuery = db.collection("employee-attendance")
             .where("employeeId", "==", employeeId)
             .where("date", "==", dateString)
-            .orderBy("timestamp", "desc")
             .limit(1);
 
         const existingSnapshot = await existingRecordQuery.get();
@@ -383,8 +382,7 @@ const checkAutoCheckInNeeded = async (req, res) => {
         // Get today's attendance records for this employee
         const query = db.collection("employee-attendance")
             .where("employeeId", "==", employeeId)
-            .where("date", "==", today)
-            .orderBy("timestamp", "desc");
+            .where("date", "==", today);
 
         const snapshot = await query.get();
         
@@ -503,7 +501,6 @@ const getTodayAttendanceStatus = async (req, res) => {
         const query = db.collection("employee-attendance")
             .where("employeeId", "==", employeeId)
             .where("date", "==", today)
-            .orderBy("timestamp", "desc")
             .limit(1);
 
         const snapshot = await query.get();
