@@ -432,7 +432,7 @@ exports.loginWithEmailPassword = async (req, res) => {
     }
 };
 
-// NEW LOGIN ENDPOINT - Email and Password Login (for existing users only)
+// LOGIN ENDPOINT - Email and Password Login with comprehensive validation
 exports.loginUser = async (req, res) => {
     console.log("loginUser called");
     try {
