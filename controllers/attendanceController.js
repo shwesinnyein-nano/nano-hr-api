@@ -216,12 +216,23 @@ const getCheckInOutHistory = async (req, res) => {
             });
         });
 
-        // Sort records by date and time (newest first)
+        // Sort records with today first, then by date and time
+        const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+        
         records.sort((a, b) => {
-            // First sort by date (newest first)
+            // If one is today and the other isn't, today comes first
+            if (a.date === today && b.date !== today) {
+                return -1; // a comes first
+            }
+            if (b.date === today && a.date !== today) {
+                return 1; // b comes first
+            }
+            
+            // If both are today or both are not today, sort by date (newest first)
             if (a.date !== b.date) {
                 return b.date.localeCompare(a.date);
             }
+            
             // If same date, sort by time (newest first)
             return b.time.localeCompare(a.time);
         });
