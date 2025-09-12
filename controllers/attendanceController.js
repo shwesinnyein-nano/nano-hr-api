@@ -217,10 +217,14 @@ const getCheckInOutHistory = async (req, res) => {
         });
 
         // Sort records with today first, then by date and time
-        // Get today's date in Thailand timezone
-        const thaiTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Bangkok"}));
+        // Get today's date in Thailand timezone (UTC+7)
+        const now = new Date();
+        const thaiOffset = 7 * 60; // Thailand is UTC+7 (7 hours * 60 minutes)
+        const thaiTime = new Date(now.getTime() + (thaiOffset * 60 * 1000));
         const today = thaiTime.toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
         
+        console.log("Current UTC time:", now.toISOString());
+        console.log("Thailand time:", thaiTime.toISOString());
         console.log("Today's date for sorting:", today);
         
         records.sort((a, b) => {
