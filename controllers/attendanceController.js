@@ -216,6 +216,16 @@ const getCheckInOutHistory = async (req, res) => {
             });
         });
 
+        // Sort records by date and time (newest first)
+        records.sort((a, b) => {
+            // First sort by date (newest first)
+            if (a.date !== b.date) {
+                return b.date.localeCompare(a.date);
+            }
+            // If same date, sort by time (newest first)
+            return b.time.localeCompare(a.time);
+        });
+
         // Apply limit
         const limitedRecords = records.slice(0, validLimit);
 
@@ -608,6 +618,64 @@ const getTodayAttendanceStatus = async (req, res) => {
         console.log("getTodayAttendanceStatus responxe", res.json);
     } catch (error) {
         console.error("Get today attendance status error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+const getAttendanceByEmployeeId = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        console.log("getAttendanceByEmployeeId", req.params);
+        const { startDate, endDate, limit } = req.query;
+        
+        if (!employeeId) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID is required"
+            });
+        }
+
+        const limitNum = limit ? parseInt(limit) : 50;
+        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 50 : Math.min(limitNum, 100);
+
+        let query = db.collection("employee-attendance")
+            .where("employeeId", "==", employeeId);
+            
+        if (startDate && endDate) {
+            query = query
+                .where("date", ">=", startDate)
+                .where("date", "<=", endDate);
+        }
+
+        const snapshot = await query.get();
+        const records = [];
+        
+        snapshot.forEach(doc => {
+            records.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        const limitedRecords = records.slice(0, validLimit);
+        
+        res.status(200).json({
+            success: true,
+            message: "Attendance records retrieved successfully",
+            count: limitedRecords.length,
+            totalRecords: records.length,
+            data: limitedRecords
+        });
+        
+        console.log("limitedRecords", limitedRecords);
+        
+    }
+    catch (error) {
+        console.error("Get attendance by employee id error:", error);
         res.status(500).json({
             success: false,
             message: "Internal server error",
