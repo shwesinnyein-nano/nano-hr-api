@@ -30,14 +30,17 @@ const checkInOut = async (req, res) => {
             });
         }
 
-        // Get current date and time
+        // Get current date and time in Thailand timezone (UTC+7)
         const currentDate = new Date();
-        const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
         
-        // Convert to Thai local time (UTC+7)
-        const thaiOffset = 7; // Thailand is UTC+7
-        const localDate = new Date(currentDate.getTime() + (thaiOffset * 60 * 1000));
-        const localTimeString = localDate.toTimeString().split(' ')[0]; // HH:MM:SS format only
+        // Convert to Thailand timezone (UTC+7)
+        const thaiTime = new Date(currentDate.toLocaleString("en-US", {timeZone: "Asia/Bangkok"}));
+        const dateString = thaiTime.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const localTimeString = thaiTime.toTimeString().split(' ')[0]; // HH:MM:SS format only
+        
+        console.log("Thailand time:", thaiTime.toLocaleString("en-US", {timeZone: "Asia/Bangkok"}));
+        console.log("Date string:", dateString);
+        console.log("Time string:", localTimeString);
 
         // Check if today's record already exists for this employee
         const existingRecordQuery = db.collection("employee-attendance")
@@ -84,9 +87,9 @@ const checkInOut = async (req, res) => {
                 time: localTimeString,
                 checkInAt: localTimeString,
                 checkOutAt: null,
-                timestamp: currentDate.toISOString(),
-                createdAt: currentDate.toISOString(),
-                updatedAt: currentDate.toISOString()
+                timestamp: thaiTime.toISOString(),
+                createdAt: thaiTime.toISOString(),
+                updatedAt: thaiTime.toISOString()
             };
 
             // Save to Firestore
@@ -138,7 +141,7 @@ const checkInOut = async (req, res) => {
                     type: 'checkout',
                     time: localTimeString,
                     checkOutAt: localTimeString,
-                    updatedAt: currentDate.toISOString()
+                    updatedAt: thaiTime.toISOString()
                 });
 
                 res.status(200).json({
@@ -155,7 +158,7 @@ const checkInOut = async (req, res) => {
                         date: dateString,
                         checkInAt: existingData.checkInAt,
                         checkOutAt: localTimeString,
-                        timestamp: currentDate.toISOString()
+                        timestamp: thaiTime.toISOString()
                     }
                 });
             } else {
