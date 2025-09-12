@@ -216,31 +216,9 @@ const getCheckInOutHistory = async (req, res) => {
             });
         });
 
-        // Sort records with today first, then by date and time
-        // Get today's date in Thailand timezone (UTC+7)
-        const now = new Date();
-        const thaiOffset = 7 * 60; // Thailand is UTC+7 (7 hours * 60 minutes)
-        const thaiTime = new Date(now.getTime() + (thaiOffset * 60 * 1000));
-        const today = thaiTime.toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
-        
-        console.log("Current UTC time:", now.toISOString());
-        console.log("Thailand time:", thaiTime.toISOString());
-        console.log("Today's date for sorting:", today);
-        
+        // Sort records by date (newest first), then by time (newest first)
         records.sort((a, b) => {
-            console.log(`Comparing: ${a.date} vs ${b.date}, today: ${today}`);
-            
-            // If one is today and the other isn't, today comes first
-            if (a.date === today && b.date !== today) {
-                console.log(`${a.date} is today, comes first`);
-                return -1; // a comes first
-            }
-            if (b.date === today && a.date !== today) {
-                console.log(`${b.date} is today, comes first`);
-                return 1; // b comes first
-            }
-            
-            // If both are today or both are not today, sort by date (newest first)
+            // First sort by date (newest first)
             if (a.date !== b.date) {
                 return b.date.localeCompare(a.date);
             }
@@ -682,6 +660,17 @@ const getAttendanceByEmployeeId = async (req, res) => {
                 id: doc.id,
                 ...doc.data()
             });
+        });
+
+        // Sort records by date (newest first), then by time (newest first)
+        records.sort((a, b) => {
+            // First sort by date (newest first)
+            if (a.date !== b.date) {
+                return b.date.localeCompare(a.date);
+            }
+            
+            // If same date, sort by time (newest first)
+            return b.time.localeCompare(a.time);
         });
 
         const limitedRecords = records.slice(0, validLimit);
