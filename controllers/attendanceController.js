@@ -217,14 +217,22 @@ const getCheckInOutHistory = async (req, res) => {
         });
 
         // Sort records with today first, then by date and time
-        const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+        // Get today's date in Thailand timezone
+        const thaiTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Bangkok"}));
+        const today = thaiTime.toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+        
+        console.log("Today's date for sorting:", today);
         
         records.sort((a, b) => {
+            console.log(`Comparing: ${a.date} vs ${b.date}, today: ${today}`);
+            
             // If one is today and the other isn't, today comes first
             if (a.date === today && b.date !== today) {
+                console.log(`${a.date} is today, comes first`);
                 return -1; // a comes first
             }
             if (b.date === today && a.date !== today) {
+                console.log(`${b.date} is today, comes first`);
                 return 1; // b comes first
             }
             
