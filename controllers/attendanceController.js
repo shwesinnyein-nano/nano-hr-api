@@ -690,5 +690,6 @@ module.exports = {
     getAllAttendanceHistory,
     getAttendanceByEmployeeAndDate,
     checkAutoCheckInNeeded,
-    getTodayAttendanceStatus
+    getTodayAttendanceStatus,
+    getAttendanceByEmployeeId
 };
