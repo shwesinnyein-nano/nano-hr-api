@@ -14,6 +14,8 @@ const resignationRoutes = require("./routes/resignationRoutes");
 
 const app = express();
 
+// Updated: Leave controller with 3-month eligibility and gender filtering
+
 
 const allowedOrigin = process.env.NODE_ENV === 'production'
     ? process.env.PRODUCTION_FRONTEND_URL // e.g., "https://your-production-domain.com"
