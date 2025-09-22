@@ -52,7 +52,8 @@ const getLeaveSettings = async (req, res) => {
         if (gender && ['male', 'female', 'all'].includes(gender.toLowerCase())) {
             if (gender.toLowerCase() !== 'all') {
                 filteredLeaveSettings = leaveSettings.filter(setting => 
-                    setting.gender === gender.toLowerCase() || setting.gender === 'all'
+                    setting.gender.toLowerCase() === gender.toLowerCase() || 
+                    setting.gender.toLowerCase() === 'all'
                 );
             }
         }
