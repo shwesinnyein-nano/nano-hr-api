@@ -5,8 +5,19 @@ const { v4: uuidv4 } = require('uuid');
 const getLeaveSettings = async (req, res) => {
     console.log("Get leave settings called");
     try {
+        const { gender, employeeId } = req.query;
+        
         const leaveSettingsRef = db.collection("leave-settings");
-        const snapshot = await leaveSettingsRef.get();
+        let query = leaveSettingsRef;
+        
+        // If gender filter is provided, filter by gender
+        if (gender && ['male', 'female', 'all'].includes(gender.toLowerCase())) {
+            if (gender.toLowerCase() !== 'all') {
+                query = query.where("gender", "in", [gender.toLowerCase(), "all"]);
+            }
+        }
+        
+        const snapshot = await query.get();
 
         if (snapshot.empty) {
             return res.json({
@@ -35,11 +46,39 @@ const getLeaveSettings = async (req, res) => {
             });
         });
 
+        // If employeeId is provided, also check if employee is eligible (3+ months)
+        let employeeEligible = true;
+        let monthsWithCompany = 0;
+        
+        if (employeeId) {
+            try {
+                const employeesRef = db.collection("employees");
+                const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+                
+                if (!employeeQuery.empty) {
+                    const employeeDoc = employeeQuery.docs[0];
+                    const employeeData = employeeDoc.data();
+                    const joinDate = new Date(employeeData.joinDate);
+                    const today = new Date();
+                    
+                    monthsWithCompany = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
+                                      (today.getMonth() - joinDate.getMonth());
+                    
+                    employeeEligible = monthsWithCompany >= 3;
+                }
+            } catch (error) {
+                console.error("Error checking employee eligibility:", error);
+            }
+        }
+
         res.json({
             success: true,
             message: "Leave settings retrieved successfully",
             count: leaveSettings.length,
-            data: leaveSettings
+            data: leaveSettings,
+            employeeEligible: employeeEligible,
+            monthsWithCompany: monthsWithCompany,
+            requiredMonths: 3
         });
 
     } catch (error) {
@@ -65,16 +104,55 @@ const getEmployeeLeaveList = async (req, res) => {
             });
         }
 
+        // First, get employee data to check join date
+        const employeesRef = db.collection("employees");
+        const employeeQuery = await employeesRef.where("uid", "==", uid).get();
+        
+        if (employeeQuery.empty) {
+            return res.status(404).json({ 
+                success: false,
+                message: "Employee not found" 
+            });
+        }
+
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeData = employeeDoc.data();
+        const joinDate = new Date(employeeData.joinDate);
+        const today = new Date();
+        
+        // Calculate months difference
+        const monthsDiff = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
+                          (today.getMonth() - joinDate.getMonth());
+        
+        console.log(`Employee join date: ${joinDate.toISOString()}`);
+        console.log(`Today: ${today.toISOString()}`);
+        console.log(`Months with company: ${monthsDiff}`);
+
+        // Check if employee has been with company for 3+ months
+        if (monthsDiff < 3) {
+            return res.json({
+                success: true,
+                message: "Employee must be with company for 3+ months to access leave data",
+                data: [],
+                count: 0,
+                eligible: false,
+                monthsWithCompany: monthsDiff,
+                requiredMonths: 3
+            });
+        }
+
         // Get employee leave records filtered by employeeId (login user UID)
         const employeeLeaveRef = db.collection("employee-leave");
-        const querySnapshot = await employeeLeaveRef.where("employeeId", "==", uid).get();
+        const querySnapshot = await employeeLeaveRef.where("uid", "==", uid).get();
 
         if (querySnapshot.empty) {
             return res.json({
                 success: true,
                 message: "No leave records found for this employee",
                 data: [],
-                count: 0
+                count: 0,
+                eligible: true,
+                monthsWithCompany: monthsDiff
             });
         }
 
@@ -109,7 +187,9 @@ const getEmployeeLeaveList = async (req, res) => {
             success: true,
             message: "Employee leave records retrieved successfully",
             count: leaveRecords.length,
-            data: leaveRecords
+            data: leaveRecords,
+            eligible: true,
+            monthsWithCompany: monthsDiff
         });
 
     } catch (error) {
