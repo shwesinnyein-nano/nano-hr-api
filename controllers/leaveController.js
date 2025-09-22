@@ -7,28 +7,77 @@ const getLeaveSettings = async (req, res) => {
     try {
         const { gender, employeeId } = req.query;
         
-        const leaveSettingsRef = db.collection("leave-settings");
-        let query = leaveSettingsRef;
+        // Step 1: If employeeId is provided, FIRST check if employee is eligible (3+ months)
+        let employeeEligible = true;
+        let monthsWithCompany = 0;
+        let employeeGender = null;
         
-        // If gender filter is provided, filter by gender
-        if (gender && ['male', 'female', 'all'].includes(gender.toLowerCase())) {
-            if (gender.toLowerCase() !== 'all') {
-                // Note: Firestore 'in' queries are limited to 10 values, so we'll filter after fetching
-                // query = query.where("gender", "in", [gender.toLowerCase(), "all"]);
+        if (employeeId) {
+            try {
+                const employeesRef = db.collection("employees");
+                const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+                
+                if (employeeQuery.empty) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Employee not found"
+                    });
+                }
+                
+                const employeeDoc = employeeQuery.docs[0];
+                const employeeData = employeeDoc.data();
+                const joinDate = new Date(employeeData.joinDate);
+                const today = new Date();
+                
+                monthsWithCompany = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
+                                  (today.getMonth() - joinDate.getMonth());
+                
+                employeeEligible = monthsWithCompany >= 3;
+                employeeGender = employeeData.gender;
+                
+                console.log(`Employee ${employeeId}: ${monthsWithCompany} months with company, Gender: ${employeeGender}, Eligible: ${employeeEligible}`);
+                
+                // If not eligible, return empty array immediately
+                if (!employeeEligible) {
+                    return res.json({
+                        success: true,
+                        message: `Employee must be with company for 3+ months to access leave types. Current: ${monthsWithCompany} months`,
+                        data: [],
+                        count: 0,
+                        employeeEligible: false,
+                        monthsWithCompany: monthsWithCompany,
+                        requiredMonths: 3,
+                        employeeGender: employeeGender
+                    });
+                }
+            } catch (error) {
+                console.error("Error checking employee eligibility:", error);
+                return res.status(500).json({
+                    success: false,
+                    message: "Error checking employee eligibility",
+                    error: error.message
+                });
             }
         }
         
-        const snapshot = await query.get();
+        // Step 2: If eligible (or no employeeId), retrieve ALL leave settings from database
+        const leaveSettingsRef = db.collection("leave-settings");
+        const snapshot = await leaveSettingsRef.get();
 
         if (snapshot.empty) {
             return res.json({
                 success: true,
                 message: "No leave settings found",
                 data: [],
-                count: 0
+                count: 0,
+                employeeEligible: employeeEligible,
+                monthsWithCompany: monthsWithCompany,
+                requiredMonths: 3,
+                employeeGender: employeeGender
             });
         }
 
+        // Step 3: Get all leave settings
         const leaveSettings = [];
         snapshot.forEach(doc => {
             const leaveSettingData = doc.data();
@@ -47,62 +96,28 @@ const getLeaveSettings = async (req, res) => {
             });
         });
 
-        // Apply gender filter after fetching
+        // Step 4: Filter by gender (employee's gender or provided gender filter)
         let filteredLeaveSettings = leaveSettings;
-        if (gender && ['male', 'female', 'all'].includes(gender.toLowerCase())) {
-            if (gender.toLowerCase() !== 'all') {
-                filteredLeaveSettings = leaveSettings.filter(setting => 
-                    setting.gender.toLowerCase() === gender.toLowerCase() || 
-                    setting.gender.toLowerCase() === 'all'
-                );
-            }
-        }
-
-        // If employeeId is provided, check eligibility and auto-filter by employee's gender
-        let employeeEligible = true;
-        let monthsWithCompany = 0;
-        let employeeGender = null;
+        let filterGender = null;
         
-        if (employeeId) {
-            try {
-                const employeesRef = db.collection("employees");
-                const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
-                
-                if (!employeeQuery.empty) {
-                    const employeeDoc = employeeQuery.docs[0];
-                    const employeeData = employeeDoc.data();
-                    const joinDate = new Date(employeeData.joinDate);
-                    const today = new Date();
-                    
-                    monthsWithCompany = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
-                                      (today.getMonth() - joinDate.getMonth());
-                    
-                    employeeEligible = monthsWithCompany >= 3;
-                    employeeGender = employeeData.gender;
-                    
-                    // If employee is eligible, auto-filter by their gender
-                    if (employeeEligible && employeeGender) {
-                        filteredLeaveSettings = leaveSettings.filter(setting => 
-                            setting.gender.toLowerCase() === employeeGender.toLowerCase() || 
-                            setting.gender.toLowerCase() === 'all'
-                        );
-                    } else if (!employeeEligible) {
-                        // If not eligible, return empty array
-                        filteredLeaveSettings = [];
-                    }
-                }
-            } catch (error) {
-                console.error("Error checking employee eligibility:", error);
-            }
+        if (employeeId && employeeEligible && employeeGender) {
+            // Use employee's gender for filtering
+            filterGender = employeeGender;
+        } else if (gender && ['male', 'female', 'all'].includes(gender.toLowerCase())) {
+            // Use provided gender filter
+            filterGender = gender.toLowerCase();
+        }
+        
+        if (filterGender && filterGender !== 'all') {
+            filteredLeaveSettings = leaveSettings.filter(setting => 
+                setting.gender.toLowerCase() === filterGender.toLowerCase() || 
+                setting.gender.toLowerCase() === 'all'
+            );
         }
 
         let message = "Leave settings retrieved successfully";
         if (employeeId) {
-            if (!employeeEligible) {
-                message = `Employee must be with company for 3+ months to access leave types. Current: ${monthsWithCompany} months`;
-            } else {
-                message = `Leave settings for ${employeeGender} employee (${monthsWithCompany} months with company)`;
-            }
+            message = `Leave settings for ${employeeGender} employee (${monthsWithCompany} months with company)`;
         }
 
         res.json({
