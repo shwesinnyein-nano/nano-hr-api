@@ -58,9 +58,10 @@ const getLeaveSettings = async (req, res) => {
             }
         }
 
-        // If employeeId is provided, also check if employee is eligible (3+ months)
+        // If employeeId is provided, check eligibility and auto-filter by employee's gender
         let employeeEligible = true;
         let monthsWithCompany = 0;
+        let employeeGender = null;
         
         if (employeeId) {
             try {
@@ -77,20 +78,42 @@ const getLeaveSettings = async (req, res) => {
                                       (today.getMonth() - joinDate.getMonth());
                     
                     employeeEligible = monthsWithCompany >= 3;
+                    employeeGender = employeeData.gender;
+                    
+                    // If employee is eligible, auto-filter by their gender
+                    if (employeeEligible && employeeGender) {
+                        filteredLeaveSettings = leaveSettings.filter(setting => 
+                            setting.gender.toLowerCase() === employeeGender.toLowerCase() || 
+                            setting.gender.toLowerCase() === 'all'
+                        );
+                    } else if (!employeeEligible) {
+                        // If not eligible, return empty array
+                        filteredLeaveSettings = [];
+                    }
                 }
             } catch (error) {
                 console.error("Error checking employee eligibility:", error);
             }
         }
 
+        let message = "Leave settings retrieved successfully";
+        if (employeeId) {
+            if (!employeeEligible) {
+                message = `Employee must be with company for 3+ months to access leave types. Current: ${monthsWithCompany} months`;
+            } else {
+                message = `Leave settings for ${employeeGender} employee (${monthsWithCompany} months with company)`;
+            }
+        }
+
         res.json({
             success: true,
-            message: "Leave settings retrieved successfully",
+            message: message,
             count: filteredLeaveSettings.length,
             data: filteredLeaveSettings,
             employeeEligible: employeeEligible,
             monthsWithCompany: monthsWithCompany,
-            requiredMonths: 3
+            requiredMonths: 3,
+            employeeGender: employeeGender
         });
 
     } catch (error) {
