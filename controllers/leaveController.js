@@ -13,7 +13,8 @@ const getLeaveSettings = async (req, res) => {
         // If gender filter is provided, filter by gender
         if (gender && ['male', 'female', 'all'].includes(gender.toLowerCase())) {
             if (gender.toLowerCase() !== 'all') {
-                query = query.where("gender", "in", [gender.toLowerCase(), "all"]);
+                // Note: Firestore 'in' queries are limited to 10 values, so we'll filter after fetching
+                // query = query.where("gender", "in", [gender.toLowerCase(), "all"]);
             }
         }
         
@@ -46,6 +47,16 @@ const getLeaveSettings = async (req, res) => {
             });
         });
 
+        // Apply gender filter after fetching
+        let filteredLeaveSettings = leaveSettings;
+        if (gender && ['male', 'female', 'all'].includes(gender.toLowerCase())) {
+            if (gender.toLowerCase() !== 'all') {
+                filteredLeaveSettings = leaveSettings.filter(setting => 
+                    setting.gender === gender.toLowerCase() || setting.gender === 'all'
+                );
+            }
+        }
+
         // If employeeId is provided, also check if employee is eligible (3+ months)
         let employeeEligible = true;
         let monthsWithCompany = 0;
@@ -74,8 +85,8 @@ const getLeaveSettings = async (req, res) => {
         res.json({
             success: true,
             message: "Leave settings retrieved successfully",
-            count: leaveSettings.length,
-            data: leaveSettings,
+            count: filteredLeaveSettings.length,
+            data: filteredLeaveSettings,
             employeeEligible: employeeEligible,
             monthsWithCompany: monthsWithCompany,
             requiredMonths: 3
