@@ -255,6 +255,9 @@ const getEmployeeLeaveList = async (req, res) => {
 // Create leave request
 const createLeaveRequest = async (req, res) => {
     console.log("Create leave request called");
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    console.log("Request headers:", req.headers);
+    console.log("Request method:", req.method);
     try {
         const { 
             employeeId, 
