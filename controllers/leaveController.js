@@ -192,8 +192,22 @@ const getEmployeeLeaveList = async (req, res) => {
         }
 
         // Get employee leave records filtered by employeeId (login user UID)
+        console.log(`🔍 Querying employee-leave table for employeeId: ${employeeData.uid}`);
         const employeeLeaveRef = db.collection("employee-leave");
-        const querySnapshot = await employeeLeaveRef.where("uid", "==", uid).get();
+        
+        // First, let's check if there are any records in the employee-leave table at all
+        const allRecordsSnapshot = await employeeLeaveRef.limit(5).get();
+        console.log(`📊 Total records in employee-leave table: ${allRecordsSnapshot.size}`);
+        if (!allRecordsSnapshot.empty) {
+            console.log(`📋 Sample records:`, allRecordsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                employeeId: doc.data().employeeId,
+                leaveType: doc.data().leaveType
+            })));
+        }
+        
+        const querySnapshot = await employeeLeaveRef.where("employeeId", "==", employeeData.uid).get();
+        console.log(`📊 Found ${querySnapshot.size} leave records for employeeId: ${employeeData.uid}`);
 
         if (querySnapshot.empty) {
             return res.json({
@@ -209,6 +223,13 @@ const getEmployeeLeaveList = async (req, res) => {
         const leaveRecords = [];
         querySnapshot.forEach(doc => {
             const leaveData = doc.data();
+            console.log(`📝 Processing leave record:`, {
+                docId: doc.id,
+                employeeId: leaveData.employeeId,
+                leaveType: leaveData.leaveType,
+                status: leaveData.status,
+                createdAt: leaveData.createdAt
+            });
             leaveRecords.push({
                 id: doc.id,
                 uid: leaveData.uid,
