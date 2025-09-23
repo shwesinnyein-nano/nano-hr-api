@@ -11,4 +11,8 @@ router.get("/all", leaveController.getAllLeaveRequests);
 router.get("/:leaveId", leaveController.getLeaveRequestById);
 router.put("/:leaveId/status", leaveController.updateLeaveRequestStatus);
 
+// Multi-level approval routes
+router.get("/approval/pending", leaveController.getLeaveRequestsByApprovalLevel);
+router.put("/approval/:leaveId", leaveController.approveLeaveRequest);
+
 module.exports = router;

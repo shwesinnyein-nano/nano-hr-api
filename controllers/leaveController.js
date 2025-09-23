@@ -371,6 +371,19 @@ const createLeaveRequest = async (req, res) => {
         // Generate unique leave request ID and UUID v4
         const leaveRequestId = uuidv4();
 
+        // Get employee data to extract branch information
+        const employeesRef = db.collection("employees");
+        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+        
+        let branchCode = "001"; // Default branch
+        let branchName = "Main Branch";
+        
+        if (!employeeQuery.empty) {
+            const employeeData = employeeQuery.docs[0].data();
+            branchCode = employeeData.branch || "001";
+            branchName = employeeData.branchName || "Main Branch";
+        }
+
         // Create leave request data
         const leaveRequestData = {
             id: leaveRequestId,
@@ -383,6 +396,18 @@ const createLeaveRequest = async (req, res) => {
             attachment: attachment || null,
             status: "pending",
             statusName: "Pending",
+            // Approval workflow fields
+            approvalLevel: "employee",
+            currentApprover: "manager",
+            branchCode: branchCode,
+            branchName: branchName,
+            approvalHistory: [{
+                level: "employee",
+                action: "submitted",
+                userId: employeeId,
+                timestamp: new Date().toISOString(),
+                comment: "Leave request submitted"
+            }],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
@@ -692,11 +717,202 @@ const getLeaveRequestById = async (req, res) => {
     }
 };
 
+// Get leave requests by approval level and branch
+const getLeaveRequestsByApprovalLevel = async (req, res) => {
+    console.log("🚀 Get leave requests by approval level called");
+    try {
+        const { level, branchCode, userId } = req.query;
+        
+        console.log(`🔍 Querying for level: ${level}, branch: ${branchCode}, user: ${userId}`);
+        
+        let query = db.collection("employee-leave");
+        
+        // Filter by approval level
+        if (level) {
+            query = query.where("currentApprover", "==", level);
+        }
+        
+        // Filter by branch (for managers)
+        if (branchCode && level === "manager") {
+            query = query.where("branchCode", "==", branchCode);
+        }
+        
+        // Filter by status (only pending for approval)
+        query = query.where("status", "==", "pending");
+        
+        const snapshot = await query.get();
+        
+        if (snapshot.empty) {
+            return res.json({
+                success: true,
+                message: `No pending leave requests found for ${level} approval`,
+                data: [],
+                count: 0
+            });
+        }
+        
+        const leaveRequests = [];
+        snapshot.forEach(doc => {
+            const leaveData = doc.data();
+            leaveRequests.push({
+                id: doc.id,
+                uid: leaveData.uid || doc.id,
+                employeeId: leaveData.employeeId,
+                leaveType: leaveData.leaveType,
+                leaveTypeName: leaveData.leaveTypeName,
+                requestType: leaveData.requestType || 'daily',
+                startDate: leaveData.startDate || leaveData.fromDate || null,
+                endDate: leaveData.endDate || leaveData.toDate || null,
+                totalDays: leaveData.totalDays || 0,
+                reason: leaveData.reason,
+                status: leaveData.status,
+                statusName: leaveData.statusName,
+                branchCode: leaveData.branchCode,
+                branchName: leaveData.branchName,
+                currentApprover: leaveData.currentApprover,
+                approvalLevel: leaveData.approvalLevel,
+                approvalHistory: leaveData.approvalHistory || [],
+                createdAt: leaveData.createdAt,
+                updatedAt: leaveData.updatedAt
+            });
+        });
+        
+        // Sort by created date (oldest first for approval queue)
+        leaveRequests.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        
+        res.json({
+            success: true,
+            message: `Leave requests for ${level} approval retrieved successfully`,
+            count: leaveRequests.length,
+            data: leaveRequests
+        });
+        
+    } catch (error) {
+        console.error("❌ Error getting leave requests by approval level:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// Approve leave request (multi-level)
+const approveLeaveRequest = async (req, res) => {
+    console.log("🚀 Approve leave request called");
+    try {
+        const { leaveId } = req.params;
+        const { userId, userRole, comment, action } = req.body; // action: approve/reject
+        
+        if (!leaveId || !userId || !userRole || !action) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Leave ID, user ID, user role, and action are required" 
+            });
+        }
+        
+        // Get the leave request
+        const leaveRequestRef = db.collection("employee-leave").doc(leaveId);
+        const leaveRequestDoc = await leaveRequestRef.get();
+        
+        if (!leaveRequestDoc.exists) {
+            return res.status(404).json({ 
+                success: false,
+                message: "Leave request not found" 
+            });
+        }
+        
+        const leaveData = leaveRequestDoc.data();
+        
+        // Check if user has permission to approve at this level
+        if (leaveData.currentApprover !== userRole) {
+            return res.status(403).json({ 
+                success: false,
+                message: `You don't have permission to approve at ${leaveData.currentApprover} level` 
+            });
+        }
+        
+        // Determine next approval level
+        let nextApprover = null;
+        let newStatus = "pending";
+        
+        if (action === "approve") {
+            switch (userRole) {
+                case "manager":
+                    nextApprover = "hr";
+                    break;
+                case "hr":
+                    nextApprover = "approver";
+                    break;
+                case "approver":
+                    nextApprover = null;
+                    newStatus = "approved";
+                    break;
+                default:
+                    return res.status(400).json({ 
+                        success: false,
+                        message: "Invalid user role for approval" 
+                    });
+            }
+        } else if (action === "reject") {
+            nextApprover = null;
+            newStatus = "rejected";
+        }
+        
+        // Update leave request
+        const updateData = {
+            status: newStatus,
+            statusName: newStatus.charAt(0).toUpperCase() + newStatus.slice(1),
+            currentApprover: nextApprover,
+            updatedAt: new Date().toISOString()
+        };
+        
+        // Add approval history
+        const approvalEntry = {
+            level: userRole,
+            action: action,
+            userId: userId,
+            timestamp: new Date().toISOString(),
+            comment: comment || `${action} by ${userRole}`
+        };
+        
+        const currentHistory = leaveData.approvalHistory || [];
+        currentHistory.push(approvalEntry);
+        updateData.approvalHistory = currentHistory;
+        
+        await leaveRequestRef.update(updateData);
+        
+        console.log(`✅ Leave request ${leaveId} ${action} by ${userRole}`);
+        
+        res.json({
+            success: true,
+            message: `Leave request ${action} successfully`,
+            leaveRequest: {
+                id: leaveId,
+                status: newStatus,
+                statusName: updateData.statusName,
+                currentApprover: nextApprover,
+                approvalHistory: currentHistory
+            }
+        });
+        
+    } catch (error) {
+        console.error("❌ Error approving leave request:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 module.exports = {
     getLeaveSettings,
     getEmployeeLeaveList,
     createLeaveRequest,
     getAllLeaveRequests,
     updateLeaveRequestStatus,
-    getLeaveRequestById
+    getLeaveRequestById,
+    getLeaveRequestsByApprovalLevel,
+    approveLeaveRequest
 };
