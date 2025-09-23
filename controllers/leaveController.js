@@ -1,35 +1,23 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
-const multer = require('multer');
-const path = require('path');
-
-// Configure multer for file uploads
-const storage = multer.memoryStorage();
-const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB limit
-    },
-    fileFilter: (req, file, cb) => {
-        // Allow common document types
-        const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|txt/;
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = allowedTypes.test(file.mimetype);
-        
-        if (mimetype && extname) {
-            return cb(null, true);
-        } else {
-            cb(new Error('Only images and documents are allowed'));
-        }
-    }
-});
 
 // Initialize Firebase Storage
-const bucket = admin.storage().bucket();
+let bucket;
+try {
+    bucket = admin.storage().bucket();
+    console.log("✅ Firebase Storage bucket initialized successfully");
+} catch (error) {
+    console.error("❌ Firebase Storage initialization error:", error);
+    bucket = null;
+}
 
 // Upload file to Firebase Storage
 const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
     try {
+        if (!bucket) {
+            throw new Error("Firebase Storage bucket not initialized");
+        }
+        
         const fileName = `leave-attachments/${employeeId}/${leaveRequestId}/${Date.now()}_${file.originalname}`;
         const fileUpload = bucket.file(fileName);
         
