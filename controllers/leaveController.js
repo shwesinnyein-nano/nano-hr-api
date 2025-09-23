@@ -228,26 +228,37 @@ const getEmployeeLeaveList = async (req, res) => {
                 employeeId: leaveData.employeeId,
                 leaveType: leaveData.leaveType,
                 status: leaveData.status,
-                createdAt: leaveData.createdAt
+                createdAt: leaveData.createdAt,
+                allFields: Object.keys(leaveData)
             });
             leaveRecords.push({
                 id: doc.id,
-                uid: leaveData.uid,
+                uid: leaveData.uid || doc.id,
                 employeeId: leaveData.employeeId,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
-                startDate: leaveData.startDate,
-                endDate: leaveData.endDate,
-                totalDays: leaveData.totalDays,
+                requestType: leaveData.requestType || 'daily',
+                // Daily leave fields
+                startDate: leaveData.startDate || leaveData.fromDate || null,
+                endDate: leaveData.endDate || leaveData.toDate || null,
+                fromDate: leaveData.fromDate || leaveData.startDate || null,
+                toDate: leaveData.toDate || leaveData.endDate || null,
+                // Hourly leave fields
+                date: leaveData.date || null,
+                workingShift: leaveData.workingShift || null,
+                startTime: leaveData.startTime || null,
+                endTime: leaveData.endTime || null,
+                // Common fields
+                totalDays: leaveData.totalDays || 0,
                 reason: leaveData.reason,
-                status: leaveData.status,
-                statusName: leaveData.statusName,
-                approvedBy: leaveData.approvedBy,
-                approvedDate: leaveData.approvedDate,
-                rejectedReason: leaveData.rejectedReason,
+                status: leaveData.status || 'pending',
+                statusName: leaveData.statusName || 'Pending',
+                approvedBy: leaveData.approvedBy || null,
+                approvedDate: leaveData.approvedDate || null,
+                rejectedReason: leaveData.rejectedReason || null,
                 createdAt: leaveData.createdAt,
                 updatedAt: leaveData.updatedAt,
-                attachment: leaveData.attachment 
+                attachment: leaveData.attachment || null
             });
         });
 
