@@ -254,10 +254,12 @@ const getEmployeeLeaveList = async (req, res) => {
 
 // Create leave request
 const createLeaveRequest = async (req, res) => {
-    console.log("Create leave request called");
-    console.log("Request body:", JSON.stringify(req.body, null, 2));
-    console.log("Request headers:", req.headers);
-    console.log("Request method:", req.method);
+    console.log("🚀 Create leave request called");
+    console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+    console.log("📋 Request headers:", JSON.stringify(req.headers, null, 2));
+    console.log("🔧 Request method:", req.method);
+    console.log("🌐 Request URL:", req.url);
+    console.log("📊 Request query:", JSON.stringify(req.query, null, 2));
     try {
         const { 
             employeeId, 
@@ -274,11 +276,27 @@ const createLeaveRequest = async (req, res) => {
             attachment 
         } = req.body;
         
-        // Validation
+        // Validation with detailed logging
+        console.log("🔍 Validation check:");
+        console.log("  - employeeId:", employeeId ? "✅ Present" : "❌ Missing");
+        console.log("  - leaveType:", leaveType ? "✅ Present" : "❌ Missing");
+        console.log("  - leaveTypeName:", leaveTypeName ? "✅ Present" : "❌ Missing");
+        console.log("  - requestType:", requestType ? "✅ Present" : "❌ Missing");
+        console.log("  - reason:", reason ? "✅ Present" : "❌ Missing");
+        
         if (!employeeId || !leaveType || !leaveTypeName || !requestType || !reason) {
+            const missingFields = [];
+            if (!employeeId) missingFields.push("employeeId");
+            if (!leaveType) missingFields.push("leaveType");
+            if (!leaveTypeName) missingFields.push("leaveTypeName");
+            if (!requestType) missingFields.push("requestType");
+            if (!reason) missingFields.push("reason");
+            
+            console.log("❌ Missing required fields:", missingFields.join(", "));
             return res.status(400).json({ 
                 success: false,
-                message: "EmployeeId, leaveType, leaveTypeName, requestType, and reason are required" 
+                message: `Missing required fields: ${missingFields.join(", ")}`,
+                missingFields: missingFields
             });
         }
 
