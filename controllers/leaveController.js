@@ -1,5 +1,85 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
+const path = require('path');
+
+// Configure multer for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Allow common document types
+        const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|txt/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+        
+        if (mimetype && extname) {
+            return cb(null, true);
+        } else {
+            cb(new Error('Only images and documents are allowed'));
+        }
+    }
+});
+
+// Initialize Firebase Storage
+const bucket = admin.storage().bucket();
+
+// Upload file to Firebase Storage
+const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
+    try {
+        const fileName = `leave-attachments/${employeeId}/${leaveRequestId}/${Date.now()}_${file.originalname}`;
+        const fileUpload = bucket.file(fileName);
+        
+        const stream = fileUpload.createWriteStream({
+            metadata: {
+                contentType: file.mimetype,
+                metadata: {
+                    originalName: file.originalname,
+                    uploadedBy: employeeId,
+                    leaveRequestId: leaveRequestId,
+                    uploadedAt: new Date().toISOString()
+                }
+            }
+        });
+        
+        return new Promise((resolve, reject) => {
+            stream.on('error', (error) => {
+                console.error('❌ File upload error:', error);
+                reject(error);
+            });
+            
+            stream.on('finish', async () => {
+                try {
+                    // Make the file publicly accessible
+                    await fileUpload.makePublic();
+                    
+                    // Get the public URL
+                    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+                    
+                    console.log(`✅ File uploaded successfully: ${publicUrl}`);
+                    resolve({
+                        fileName: fileName,
+                        originalName: file.originalname,
+                        publicUrl: publicUrl,
+                        size: file.size,
+                        contentType: file.mimetype
+                    });
+                } catch (error) {
+                    console.error('❌ Error making file public:', error);
+                    reject(error);
+                }
+            });
+            
+            stream.end(file.buffer);
+        });
+    } catch (error) {
+        console.error('❌ Upload file to storage error:', error);
+        throw error;
+    }
+};
 
 // Get leave settings list
 const getLeaveSettings = async (req, res) => {
@@ -284,7 +364,7 @@ const getEmployeeLeaveList = async (req, res) => {
     }
 };
 
-// Create leave request
+// Create leave request with file upload support
 const createLeaveRequest = async (req, res) => {
     console.log("🚀 Create leave request called");
     console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
@@ -292,6 +372,7 @@ const createLeaveRequest = async (req, res) => {
     console.log("🔧 Request method:", req.method);
     console.log("🌐 Request URL:", req.url);
     console.log("📊 Request query:", JSON.stringify(req.query, null, 2));
+    console.log("📎 Files:", req.files ? req.files.length : 0);
     try {
         const { 
             employeeId, 
@@ -371,6 +452,35 @@ const createLeaveRequest = async (req, res) => {
         // Generate unique leave request ID and UUID v4
         const leaveRequestId = uuidv4();
 
+        // Handle file uploads
+        let attachmentData = null;
+        if (req.files && req.files.length > 0) {
+            console.log(`📎 Processing ${req.files.length} file(s) for upload`);
+            try {
+                const uploadedFiles = [];
+                for (const file of req.files) {
+                    const uploadResult = await uploadFileToStorage(file, leaveRequestId, employeeId);
+                    uploadedFiles.push(uploadResult);
+                }
+                attachmentData = {
+                    files: uploadedFiles,
+                    count: uploadedFiles.length,
+                    uploadedAt: new Date().toISOString()
+                };
+                console.log(`✅ Successfully uploaded ${uploadedFiles.length} file(s)`);
+            } catch (uploadError) {
+                console.error("❌ File upload failed:", uploadError);
+                return res.status(500).json({
+                    success: false,
+                    message: "File upload failed",
+                    error: uploadError.message
+                });
+            }
+        } else if (attachment) {
+            // Handle text-based attachment (legacy support)
+            attachmentData = attachment;
+        }
+
         // Get employee data to extract branch information
         const employeesRef = db.collection("employees");
         const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
@@ -393,7 +503,7 @@ const createLeaveRequest = async (req, res) => {
             leaveTypeName: leaveTypeName,
             requestType: requestType,
             reason: reason,
-            attachment: attachment || null,
+            attachment: attachmentData,
             status: "pending",
             statusName: "Pending",
             // Approval workflow fields
