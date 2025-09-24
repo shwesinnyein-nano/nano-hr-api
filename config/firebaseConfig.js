@@ -19,15 +19,31 @@
 
 const admin = require("firebase-admin");
 
+console.log("🔄 Firebase Admin initialization starting...");
+console.log("Admin apps count:", admin.apps.length);
 
-console.log("admin", admin);
-const firebaseConfig = JSON.parse(process.env.FIREBASE_ADMIN_CREDENTIALS);
+// Check if FIREBASE_ADMIN_CREDENTIALS exists
+if (!process.env.FIREBASE_ADMIN_CREDENTIALS) {
+  console.error("❌ FIREBASE_ADMIN_CREDENTIALS environment variable not found");
+  throw new Error("FIREBASE_ADMIN_CREDENTIALS environment variable is required");
+}
 
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(firebaseConfig),
-  });
+try {
+  const firebaseConfig = JSON.parse(process.env.FIREBASE_ADMIN_CREDENTIALS);
+  console.log("✅ Firebase config parsed successfully");
+  console.log("Project ID:", firebaseConfig.project_id);
+  
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(firebaseConfig),
+    });
+    console.log("✅ Firebase Admin initialized successfully");
+  } else {
+    console.log("✅ Firebase Admin already initialized");
+  }
+} catch (error) {
+  console.error("❌ Firebase Admin initialization error:", error);
+  throw error;
 }
 
 

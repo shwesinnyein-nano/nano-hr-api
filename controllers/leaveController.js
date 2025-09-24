@@ -1,21 +1,43 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
 
-// Initialize Firebase Storage
+// Initialize Firebase Storage with better error handling
 let bucket;
-try {
-    bucket = admin.storage().bucket();
-    console.log("✅ Firebase Storage bucket initialized successfully");
-} catch (error) {
-    console.error("❌ Firebase Storage initialization error:", error);
-    bucket = null;
-}
+const initializeFirebaseStorage = () => {
+    try {
+        console.log("🔄 Initializing Firebase Storage...");
+        console.log("Admin apps:", admin.apps.length);
+        
+        if (admin.apps.length === 0) {
+            console.error("❌ Firebase Admin not initialized");
+            return null;
+        }
+        
+        bucket = admin.storage().bucket();
+        console.log("✅ Firebase Storage bucket initialized successfully");
+        console.log("Bucket name:", bucket.name);
+        return bucket;
+    } catch (error) {
+        console.error("❌ Firebase Storage initialization error:", error);
+        console.error("Error details:", error.message);
+        console.error("Error stack:", error.stack);
+        return null;
+    }
+};
+
+// Initialize on module load
+bucket = initializeFirebaseStorage();
 
 // Upload file to Firebase Storage
 const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
     try {
+        // Retry initialization if bucket is null
         if (!bucket) {
-            throw new Error("Firebase Storage bucket not initialized");
+            console.log("🔄 Bucket is null, retrying initialization...");
+            bucket = initializeFirebaseStorage();
+            if (!bucket) {
+                throw new Error("Firebase Storage bucket not initialized after retry");
+            }
         }
         
         const fileName = `leave-attachments/${employeeId}/${leaveRequestId}/${Date.now()}_${file.originalname}`;
