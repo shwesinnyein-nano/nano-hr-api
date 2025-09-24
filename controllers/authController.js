@@ -295,39 +295,11 @@ exports.loginWithEmailPassword = async (req, res) => {
         const querySnapshot = await employeesRef.where("email", "==", email).get();
         
         if (querySnapshot.empty) {
-            // Employee doesn't exist - REGISTRATION FLOW
-            console.log(`Employee not found with email: ${email} - Starting registration`);
-            
-            // Create new employee record with email and password
-            const newEmployeeData = {
-                email: email,
-                password: password,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                status: "active",
-                role: "employee"
-            };
-
-            // Add new employee to Firestore
-            const newEmployeeRef = await employeesRef.add(newEmployeeData);
-            const newEmployeeDoc = await newEmployeeRef.get();
-            const savedEmployeeData = newEmployeeDoc.data();
-
-            console.log(`New employee registered with email: ${email}`);
-
-            // Return success response for registration
-            res.json({
-                success: true,
-                message: "Registration successful",
-                isRegistration: true,
-                employee: {
-                    id: newEmployeeDoc.id,
-                    email: savedEmployeeData.email,
-                    status: savedEmployeeData.status,
-                    role: savedEmployeeData.role,
-                    createdAt: savedEmployeeData.createdAt,
-                    updatedAt: savedEmployeeData.updatedAt
-                }
+            // Employee doesn't exist - Show HR contact message
+            console.log(`Employee not found with email: ${email} - Contact HR required`);
+            return res.status(404).json({ 
+                success: false,
+                message: "Your email address was not found in system, please contact to your HR" 
             });
 
         } else {
@@ -337,44 +309,11 @@ exports.loginWithEmailPassword = async (req, res) => {
 
             // Check if employee has a password set
             if (!employeeData.password) {
-                // First time login - save the password
-                await employeeDoc.ref.update({ 
-                    password: password,
-                    updatedAt: new Date().toISOString()
-                });
-                
-                console.log(`Password saved for existing employee: ${email}`);
-                
-                // Return success response for first-time password setup
-                res.json({
-                    success: true,
-                    message: "Password saved and login successful",
-                    isRegistration: false,
-                    employee: {
-                        id: employeeDoc.id,
-                        authId: employeeData.authId,
-                        nickname: employeeData.nickname,
-                        firstName: employeeData.firstName,
-                        lastName: employeeData.lastName,
-                        email: employeeData.email,
-                        primaryNumber: employeeData.primary_number,
-                        companyName: employeeData.companyName,
-                        locationName: employeeData.locationName,
-                        branchName: employeeData.branchName,
-                        positionName: employeeData.positionName,
-                        status: employeeData.status,
-                        role: employeeData.role,
-                        profileImage: employeeData.profileImage,
-                        has2FA: !!employeeData.secret,
-                        joinDate: employeeData.joinDate,
-                        maritalStatus: employeeData.maritalStatus,
-                        dateOfBirth: employeeData.dateOfBirth,
-                        gender: employeeData.gender,
-                        salary: employeeData.salary,
-                        department: employeeData.department,
-                        createdAt: employeeData.createdAt,
-                        updatedAt: new Date().toISOString()
-                    }
+                // Employee exists but no password - need to register
+                console.log(`Employee ${email} exists but no password set - need to register`);
+                return res.status(400).json({ 
+                    success: false,
+                    message: "You need to register first" 
                 });
 
             } else {
