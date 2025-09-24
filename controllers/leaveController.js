@@ -16,6 +16,20 @@ const initializeFirebaseStorage = () => {
         bucket = admin.storage().bucket();
         console.log("✅ Firebase Storage bucket initialized successfully");
         console.log("Bucket name:", bucket.name);
+        
+        // Test if bucket exists
+        try {
+            const [exists] = await bucket.exists();
+            console.log("Bucket exists:", exists);
+            if (!exists) {
+                console.error("❌ Storage bucket does not exist");
+                return null;
+            }
+        } catch (bucketError) {
+            console.error("❌ Error checking bucket existence:", bucketError);
+            return null;
+        }
+        
         return bucket;
     } catch (error) {
         console.error("❌ Firebase Storage initialization error:", error);

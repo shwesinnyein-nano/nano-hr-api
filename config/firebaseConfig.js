@@ -36,8 +36,10 @@ try {
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(firebaseConfig),
+      storageBucket: `${firebaseConfig.project_id}.appspot.com`
     });
     console.log("✅ Firebase Admin initialized successfully");
+    console.log("Storage bucket:", `${firebaseConfig.project_id}.appspot.com`);
   } else {
     console.log("✅ Firebase Admin already initialized");
   }
