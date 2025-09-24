@@ -3,7 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 
 // Initialize Firebase Storage with better error handling
 let bucket;
-const initializeFirebaseStorage = () => {
+const initializeFirebaseStorage = async () => {
     try {
         console.log("🔄 Initializing Firebase Storage...");
         console.log("Admin apps:", admin.apps.length);
@@ -40,7 +40,12 @@ const initializeFirebaseStorage = () => {
 };
 
 // Initialize on module load
-bucket = initializeFirebaseStorage();
+initializeFirebaseStorage().then(result => {
+    bucket = result;
+}).catch(error => {
+    console.error("Failed to initialize Firebase Storage:", error);
+    bucket = null;
+});
 
 // Upload file to Firebase Storage
 const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
@@ -48,7 +53,7 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
         // Retry initialization if bucket is null
         if (!bucket) {
             console.log("🔄 Bucket is null, retrying initialization...");
-            bucket = initializeFirebaseStorage();
+            bucket = await initializeFirebaseStorage();
             if (!bucket) {
                 throw new Error("Firebase Storage bucket not initialized after retry");
             }
