@@ -578,24 +578,60 @@ const createLeaveRequest = async (req, res) => {
 
         // Send notification to manager (async, don't wait for it)
         try {
-            // Find manager for this employee (you might need to adjust this logic based on your org structure)
-            const managerId = "manager-id-here"; // Replace with actual manager lookup logic
+            // Find manager for this employee - using employee's branch to find manager
+            let managerId = null;
             
-            sendLeaveRequestNotification({
-                body: {
-                    employeeId: employeeId,
-                    leaveType: leaveTypeName,
-                    fromDate: fromDate || date,
-                    toDate: toDate || date,
-                    reason: reason,
-                    managerId: managerId,
-                    channels: ['in_app', 'push'] // Only FREE channels
+            // Get employee data to find their manager
+            const employeesRef = db.collection("employees");
+            const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+            
+            if (!employeeQuery.empty) {
+                const employeeData = employeeQuery.docs[0].data();
+                const branchCode = employeeData.branch || "001";
+                
+                // Find manager for this branch (you can adjust this logic based on your org structure)
+                // For now, we'll use a simple approach - find first employee with manager role in same branch
+                const managerQuery = await employeesRef
+                    .where("branch", "==", branchCode)
+                    .where("role", "==", "manager")
+                    .limit(1)
+                    .get();
+                
+                if (!managerQuery.empty) {
+                    managerId = managerQuery.docs[0].id;
+                    console.log(`✅ Found manager: ${managerId} for branch: ${branchCode}`);
+                } else {
+                    // Fallback: use the employee themselves as manager (for testing)
+                    managerId = employeeId;
+                    console.log(`⚠️ No manager found for branch ${branchCode}, using employee as manager`);
                 }
-            }, {
-                json: () => {}
-            }).catch(notifError => {
-                console.error("❌ Failed to send leave request notification:", notifError);
-            });
+            } else {
+                // Fallback: use the employee themselves as manager
+                managerId = employeeId;
+                console.log(`⚠️ Employee not found, using employee ID as manager`);
+            }
+            
+            if (managerId) {
+                sendLeaveRequestNotification({
+                    body: {
+                        employeeId: employeeId,
+                        leaveType: leaveTypeName,
+                        fromDate: fromDate || date,
+                        toDate: toDate || date,
+                        reason: reason,
+                        managerId: managerId,
+                        channels: ['in_app', 'push'] // Only FREE channels
+                    }
+                }, {
+                    json: () => {}
+                }).catch(notifError => {
+                    console.error("❌ Failed to send leave request notification:", notifError);
+                });
+                
+                console.log(`📤 Notification sent to manager: ${managerId}`);
+            } else {
+                console.log(`❌ No manager found, notification not sent`);
+            }
         } catch (notifError) {
             console.error("❌ Error sending notification:", notifError);
         }
