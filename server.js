@@ -10,6 +10,7 @@ const attendanceRoutes = require("./routes/attendanceRoutes");
 const leaveRoutes = require("./routes/leaveRoutes");
 const lineRoutes = require("./routes/lineRoutes");
 const resignationRoutes = require("./routes/resignationRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 
 const app = express();
@@ -111,6 +112,7 @@ app.use("/attendance", attendanceRoutes);
 app.use("/leave", leaveRoutes);
 app.use("/line", lineRoutes);
 app.use("/resignation", resignationRoutes);
+app.use("/notifications", notificationRoutes);
 
 
 

@@ -1,5 +1,6 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
+const { sendLeaveRequestNotification, sendLeaveStatusNotification } = require('./notificationController');
 
 // Initialize Firebase Storage with better error handling
 let bucket;
@@ -575,6 +576,30 @@ const createLeaveRequest = async (req, res) => {
 
         console.log(`Leave request created for employee: ${employeeId}`);
 
+        // Send notification to manager (async, don't wait for it)
+        try {
+            // Find manager for this employee (you might need to adjust this logic based on your org structure)
+            const managerId = "manager-id-here"; // Replace with actual manager lookup logic
+            
+            sendLeaveRequestNotification({
+                body: {
+                    employeeId: employeeId,
+                    leaveType: leaveTypeName,
+                    fromDate: fromDate || date,
+                    toDate: toDate || date,
+                    reason: reason,
+                    managerId: managerId,
+                    channels: ['email', 'in_app']
+                }
+            }, {
+                json: () => {}
+            }).catch(notifError => {
+                console.error("❌ Failed to send leave request notification:", notifError);
+            });
+        } catch (notifError) {
+            console.error("❌ Error sending notification:", notifError);
+        }
+
         res.json({
             success: true,
             message: "Leave request created successfully",
@@ -1022,6 +1047,26 @@ const approveLeaveRequest = async (req, res) => {
         await leaveRequestRef.update(updateData);
         
         console.log(`✅ Leave request ${leaveId} ${action} by ${userRole}`);
+
+        // Send notification to employee about status change (async, don't wait for it)
+        try {
+            sendLeaveStatusNotification({
+                body: {
+                    employeeId: leaveData.employeeId,
+                    leaveRequestId: leaveId,
+                    status: newStatus,
+                    approvedBy: userId,
+                    reason: comment,
+                    channels: ['email', 'in_app']
+                }
+            }, {
+                json: () => {}
+            }).catch(notifError => {
+                console.error("❌ Failed to send leave status notification:", notifError);
+            });
+        } catch (notifError) {
+            console.error("❌ Error sending notification:", notifError);
+        }
         
         res.json({
             success: true,
