@@ -589,7 +589,7 @@ const createLeaveRequest = async (req, res) => {
                     toDate: toDate || date,
                     reason: reason,
                     managerId: managerId,
-                    channels: ['email', 'in_app']
+                    channels: ['in_app', 'push'] // Only FREE channels
                 }
             }, {
                 json: () => {}
@@ -1057,7 +1057,7 @@ const approveLeaveRequest = async (req, res) => {
                     status: newStatus,
                     approvedBy: userId,
                     reason: comment,
-                    channels: ['email', 'in_app']
+                    channels: ['in_app', 'push'] // Only FREE channels
                 }
             }, {
                 json: () => {}
