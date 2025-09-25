@@ -447,15 +447,20 @@ const getManagerNotifications = async (req, res) => {
 
         // Get notifications from all employees in managed branches
         if (managedBranches.length > 0) {
-            const employeesQuery = db.collection('employees')
-                .where('branch', 'in', managedBranches)
-                .where('role', '!=', 'manager'); // Exclude other managers
+            console.log(`🔍 Looking for employees in managed branches: ${managedBranches.join(', ')}`);
             
-            const employeesSnapshot = await employeesQuery.get();
+            // Get all employees and filter by managed branches (avoid complex Firestore query)
+            const allEmployeesQuery = db.collection('employees');
+            const allEmployeesSnapshot = await allEmployeesQuery.get();
+            
             const employeeIds = [];
-            
-            employeesSnapshot.forEach(doc => {
-                employeeIds.push(doc.data().uid);
+            allEmployeesSnapshot.forEach(doc => {
+                const employeeData = doc.data();
+                // Check if employee is in managed branches and not a manager
+                if (managedBranches.includes(employeeData.branch) && employeeData.role !== 'manager') {
+                    employeeIds.push(employeeData.uid);
+                    console.log(`📋 Found employee: ${employeeData.firstName} ${employeeData.lastName} in branch: ${employeeData.branch}`);
+                }
             });
 
             console.log(`📊 Found ${employeeIds.length} employees in managed branches`);
@@ -484,6 +489,8 @@ const getManagerNotifications = async (req, res) => {
                     console.error(`❌ Error getting notifications for employee ${employeeId}:`, error);
                 }
             }
+        } else {
+            console.log(`⚠️ Manager has no managedBranches defined`);
         }
 
         // Sort all notifications by creation date (newest first)
