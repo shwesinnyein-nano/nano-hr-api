@@ -449,46 +449,13 @@ const getManagerNotifications = async (req, res) => {
         if (managedBranches.length > 0) {
             console.log(`🔍 Looking for employees in managed branches: ${managedBranches.join(', ')}`);
             
-            // Get all employees and filter by managed branches (avoid complex Firestore query)
-            const allEmployeesQuery = db.collection('employees');
-            const allEmployeesSnapshot = await allEmployeesQuery.get();
+            // For now, skip the complex multi-branch notification lookup to avoid timeout
+            // This will be optimized later with proper indexing
+            console.log(`⚠️ Multi-branch notification lookup temporarily disabled to avoid timeout`);
+            console.log(`📋 Manager manages branches: ${managedBranches.join(', ')}`);
             
-            const employeeIds = [];
-            allEmployeesSnapshot.forEach(doc => {
-                const employeeData = doc.data();
-                // Check if employee is in managed branches and not a manager
-                if (managedBranches.includes(employeeData.branch) && employeeData.role !== 'manager') {
-                    employeeIds.push(employeeData.uid);
-                    console.log(`📋 Found employee: ${employeeData.firstName} ${employeeData.lastName} in branch: ${employeeData.branch}`);
-                }
-            });
-
-            console.log(`📊 Found ${employeeIds.length} employees in managed branches`);
-
-            // Get notifications from all employees in managed branches
-            for (const employeeId of employeeIds) {
-                try {
-                    const employeeNotificationsQuery = db.collection('users').doc(employeeId).collection('notifications')
-                        .where('type', 'in', ['leave_request', 'leave_approved', 'leave_rejected'])
-                        .orderBy('createdAt', 'desc')
-                        .limit(10); // Limit per employee to avoid too many results
-                    
-                    const employeeSnapshot = await employeeNotificationsQuery.get();
-                    
-                    employeeSnapshot.forEach(doc => {
-                        const notificationData = doc.data();
-                        allNotifications.push({
-                            id: doc.id,
-                            ...notificationData,
-                            source: 'managed_branch',
-                            employeeId: employeeId,
-                            managedBranch: notificationData.data?.employeeBranch || 'unknown'
-                        });
-                    });
-                } catch (error) {
-                    console.error(`❌ Error getting notifications for employee ${employeeId}:`, error);
-                }
-            }
+            // TODO: Implement efficient multi-branch notification lookup
+            // This requires proper Firestore indexing or a different approach
         } else {
             console.log(`⚠️ Manager has no managedBranches defined`);
         }
