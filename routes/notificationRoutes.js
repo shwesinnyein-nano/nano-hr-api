@@ -3,6 +3,7 @@ const {
     sendLeaveRequestNotification,
     sendLeaveStatusNotification,
     getUserNotifications,
+    getManagerNotifications,
     markNotificationAsRead
 } = require('../controllers/notificationController');
 
@@ -18,6 +19,9 @@ router.post('/leave-status', sendLeaveStatusNotification);
 
 // Get user notifications
 router.get('/user/:userId', getUserNotifications);
+
+// Get manager notifications from all managed branches
+router.get('/manager/:managerId', getManagerNotifications);
 
 // Mark notification as read
 router.put('/user/:userId/read/:notificationId', markNotificationAsRead);

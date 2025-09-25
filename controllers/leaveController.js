@@ -578,8 +578,8 @@ const createLeaveRequest = async (req, res) => {
 
         // Send notification to manager (async, don't wait for it)
         try {
-            // Find manager for this employee - using employee's branch to find manager
-            let managerId = null;
+            // Find manager for this employee - supporting managedBranches array
+            let managerIds = [];
             
             // Get employee data to find their manager
             const employeesRef = db.collection("employees");
@@ -589,46 +589,101 @@ const createLeaveRequest = async (req, res) => {
                 const employeeData = employeeQuery.docs[0].data();
                 const branchCode = employeeData.branch || "001";
                 
-                // Find manager for this branch (you can adjust this logic based on your org structure)
-                // For now, we'll use a simple approach - find first employee with manager role in same branch
-                const managerQuery = await employeesRef
+                console.log(`🔍 Looking for manager for branch: ${branchCode}`);
+                
+                // Find all managers that manage this branch
+                // Method 1: Check managers with managedBranches array containing this branch
+                const managersWithManagedBranchesQuery = await employeesRef
+                    .where("role", "==", "manager")
+                    .get();
+                
+                const managersWithManagedBranches = [];
+                managersWithManagedBranchesQuery.forEach(doc => {
+                    const managerData = doc.data();
+                    if (managerData.managedBranches && Array.isArray(managerData.managedBranches)) {
+                        if (managerData.managedBranches.includes(branchCode)) {
+                            managersWithManagedBranches.push({
+                                id: doc.id,
+                                uid: managerData.uid,
+                                firstName: managerData.firstName,
+                                lastName: managerData.lastName,
+                                managedBranches: managerData.managedBranches
+                            });
+                        }
+                    }
+                });
+                
+                // Method 2: Fallback - find manager in same branch (legacy support)
+                const sameBranchManagerQuery = await employeesRef
                     .where("branch", "==", branchCode)
                     .where("role", "==", "manager")
                     .limit(1)
                     .get();
                 
-                if (!managerQuery.empty) {
-                    managerId = managerQuery.docs[0].id;
-                    console.log(`✅ Found manager: ${managerId} for branch: ${branchCode}`);
+                const sameBranchManagers = [];
+                sameBranchManagerQuery.forEach(doc => {
+                    const managerData = doc.data();
+                    sameBranchManagers.push({
+                        id: doc.id,
+                        uid: managerData.uid,
+                        firstName: managerData.firstName,
+                        lastName: managerData.lastName,
+                        branch: managerData.branch
+                    });
+                });
+                
+                // Combine both methods
+                const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
+                
+                // Remove duplicates based on ID
+                const uniqueManagers = allManagers.filter((manager, index, self) => 
+                    index === self.findIndex(m => m.id === manager.id)
+                );
+                
+                managerIds = uniqueManagers.map(manager => manager.id);
+                
+                if (managerIds.length > 0) {
+                    console.log(`✅ Found ${managerIds.length} manager(s) for branch: ${branchCode}`);
+                    uniqueManagers.forEach(manager => {
+                        console.log(`   - Manager: ${manager.firstName} ${manager.lastName} (ID: ${manager.id})`);
+                        if (manager.managedBranches) {
+                            console.log(`     Managed branches: ${manager.managedBranches.join(', ')}`);
+                        }
+                    });
                 } else {
                     // Fallback: use the employee themselves as manager (for testing)
-                    managerId = employeeId;
+                    managerIds = [employeeId];
                     console.log(`⚠️ No manager found for branch ${branchCode}, using employee as manager`);
                 }
             } else {
                 // Fallback: use the employee themselves as manager
-                managerId = employeeId;
+                managerIds = [employeeId];
                 console.log(`⚠️ Employee not found, using employee ID as manager`);
             }
             
-            if (managerId) {
-                sendLeaveRequestNotification({
-                    body: {
-                        employeeId: employeeId,
-                        leaveType: leaveTypeName,
-                        fromDate: fromDate || date,
-                        toDate: toDate || date,
-                        reason: reason,
-                        managerId: managerId,
-                        channels: ['in_app', 'push'] // Only FREE channels
-                    }
-                }, {
-                    json: () => {}
-                }).catch(notifError => {
-                    console.error("❌ Failed to send leave request notification:", notifError);
-                });
+            // Send notifications to all found managers
+            if (managerIds.length > 0) {
+                console.log(`📤 Sending notifications to ${managerIds.length} manager(s)`);
                 
-                console.log(`📤 Notification sent to manager: ${managerId}`);
+                for (const managerId of managerIds) {
+                    sendLeaveRequestNotification({
+                        body: {
+                            employeeId: employeeId,
+                            leaveType: leaveTypeName,
+                            fromDate: fromDate || date,
+                            toDate: toDate || date,
+                            reason: reason,
+                            managerId: managerId,
+                            channels: ['in_app', 'push'] // Only FREE channels
+                        }
+                    }, {
+                        json: () => {}
+                    }).catch(notifError => {
+                        console.error(`❌ Failed to send leave request notification to manager ${managerId}:`, notifError);
+                    });
+                    
+                    console.log(`📤 Notification sent to manager: ${managerId}`);
+                }
             } else {
                 console.log(`❌ No manager found, notification not sent`);
             }

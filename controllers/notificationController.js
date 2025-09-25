@@ -347,7 +347,7 @@ const getUserNotifications = async (req, res) => {
     console.log("🚀 Get user notifications called");
     try {
         const { userId } = req.params;
-        const { page = 1, limit = 20, unreadOnly = false } = req.query;
+        const { page = 1, limit = 20, unreadOnly = false, includeManagedBranches = false } = req.query;
 
         if (!userId) {
             return res.status(400).json({
@@ -401,6 +401,133 @@ const getUserNotifications = async (req, res) => {
     }
 };
 
+// Get manager notifications from all managed branches
+const getManagerNotifications = async (req, res) => {
+    console.log("🚀 Get manager notifications from managed branches called");
+    try {
+        const { managerId } = req.params;
+        const { page = 1, limit = 20, unreadOnly = false } = req.query;
+
+        if (!managerId) {
+            return res.status(400).json({
+                success: false,
+                message: "Manager ID is required"
+            });
+        }
+
+        // Get manager data to find their managed branches
+        const managerRef = db.collection('employees').doc(managerId);
+        const managerDoc = await managerRef.get();
+        
+        if (!managerDoc.exists) {
+            return res.status(404).json({
+                success: false,
+                message: "Manager not found"
+            });
+        }
+
+        const managerData = managerDoc.data();
+        const managedBranches = managerData.managedBranches || [];
+        
+        console.log(`🔍 Manager ${managerData.firstName} ${managerData.lastName} manages branches: ${managedBranches.join(', ')}`);
+
+        let allNotifications = [];
+
+        // Get notifications from manager's own notifications
+        const managerNotificationsQuery = db.collection('users').doc(managerId).collection('notifications').orderBy('createdAt', 'desc');
+        const managerSnapshot = await managerNotificationsQuery.get();
+        
+        managerSnapshot.forEach(doc => {
+            allNotifications.push({
+                id: doc.id,
+                ...doc.data(),
+                source: 'direct' // Direct notification to this manager
+            });
+        });
+
+        // Get notifications from all employees in managed branches
+        if (managedBranches.length > 0) {
+            const employeesQuery = db.collection('employees')
+                .where('branch', 'in', managedBranches)
+                .where('role', '!=', 'manager'); // Exclude other managers
+            
+            const employeesSnapshot = await employeesQuery.get();
+            const employeeIds = [];
+            
+            employeesSnapshot.forEach(doc => {
+                employeeIds.push(doc.data().uid);
+            });
+
+            console.log(`📊 Found ${employeeIds.length} employees in managed branches`);
+
+            // Get notifications from all employees in managed branches
+            for (const employeeId of employeeIds) {
+                try {
+                    const employeeNotificationsQuery = db.collection('users').doc(employeeId).collection('notifications')
+                        .where('type', 'in', ['leave_request', 'leave_approved', 'leave_rejected'])
+                        .orderBy('createdAt', 'desc')
+                        .limit(10); // Limit per employee to avoid too many results
+                    
+                    const employeeSnapshot = await employeeNotificationsQuery.get();
+                    
+                    employeeSnapshot.forEach(doc => {
+                        const notificationData = doc.data();
+                        allNotifications.push({
+                            id: doc.id,
+                            ...notificationData,
+                            source: 'managed_branch',
+                            employeeId: employeeId,
+                            managedBranch: notificationData.data?.employeeBranch || 'unknown'
+                        });
+                    });
+                } catch (error) {
+                    console.error(`❌ Error getting notifications for employee ${employeeId}:`, error);
+                }
+            }
+        }
+
+        // Sort all notifications by creation date (newest first)
+        allNotifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        // Filter unread only if requested
+        if (unreadOnly === 'true') {
+            allNotifications = allNotifications.filter(notification => !notification.isRead);
+        }
+
+        // Pagination
+        const totalNotifications = allNotifications.length;
+        const totalPages = Math.ceil(totalNotifications / limit);
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedNotifications = allNotifications.slice(startIndex, endIndex);
+
+        res.json({
+            success: true,
+            message: "Manager notifications from managed branches retrieved successfully",
+            data: paginatedNotifications,
+            manager: {
+                id: managerId,
+                name: `${managerData.firstName} ${managerData.lastName}`,
+                managedBranches: managedBranches
+            },
+            pagination: {
+                totalNotifications,
+                totalPages,
+                currentPage: parseInt(page),
+                limit: parseInt(limit)
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting manager notifications:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to get manager notifications",
+            error: error.message
+        });
+    }
+};
+
 // Mark notification as read
 const markNotificationAsRead = async (req, res) => {
     console.log("🚀 Mark notification as read called");
@@ -449,6 +576,7 @@ module.exports = {
     sendLeaveRequestNotification,
     sendLeaveStatusNotification,
     getUserNotifications,
+    getManagerNotifications,
     markNotificationAsRead,
     // Export utility functions for use in other controllers
     sendPushNotification,
