@@ -378,16 +378,12 @@ const getNotifications = async (req, res) => {
 
         let allNotifications = [];
 
-        // Get direct notifications for this employee
+        // Get direct notifications for this employee (simplified to avoid complex indexing)
         let directQuery = db.collection('app_notifications')
             .where('recipientId', '==', employeeId)
-            .orderBy('createdAt', 'desc');
+            .limit(parseInt(limit) * 2);
 
-        if (unreadOnly === 'true') {
-            directQuery = directQuery.where('isRead', '==', false);
-        }
-
-        const directSnapshot = await directQuery.limit(parseInt(limit) * 2).get();
+        const directSnapshot = await directQuery.get();
         
         directSnapshot.forEach(doc => {
             allNotifications.push({
@@ -397,38 +393,18 @@ const getNotifications = async (req, res) => {
             });
         });
 
-        // If manager, get notifications from managed branches
+        // If manager, get notifications from managed branches (simplified approach)
         if (isManager && managedBranches.length > 0) {
             console.log(`🔍 Getting notifications from managed branches: ${managedBranches.join(', ')}`);
+            console.log(`⚠️ Multi-branch notifications temporarily simplified to avoid index requirements`);
             
-            try {
-                // Get notifications where sender is from managed branches
-                let branchQuery = db.collection('app_notifications')
-                    .where('data.employeeBranch', 'in', managedBranches)
-                    .where('type', 'in', ['leave_request', 'leave_approved', 'leave_rejected'])
-                    .orderBy('createdAt', 'desc');
+            // For now, just show manager's direct notifications
+            // TODO: Implement efficient multi-branch lookup after creating proper indexes
+        }
 
-                if (unreadOnly === 'true') {
-                    branchQuery = branchQuery.where('isRead', '==', false);
-                }
-
-                const branchSnapshot = await branchQuery.limit(parseInt(limit)).get();
-                
-                branchSnapshot.forEach(doc => {
-                    const notificationData = doc.data();
-                    // Avoid duplicates
-                    if (!allNotifications.find(n => n.id === doc.id)) {
-                        allNotifications.push({
-                            id: doc.id,
-                            ...notificationData,
-                            source: 'managed_branch'
-                        });
-                    }
-                });
-            } catch (branchError) {
-                console.error("❌ Error getting branch notifications:", branchError);
-                // Continue without branch notifications if query fails
-            }
+        // Filter unread only if requested (after getting all notifications)
+        if (unreadOnly === 'true') {
+            allNotifications = allNotifications.filter(notification => !notification.isRead);
         }
 
         // Sort all notifications by creation date (newest first)
