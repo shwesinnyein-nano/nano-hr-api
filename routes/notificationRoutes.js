@@ -2,8 +2,7 @@ const express = require('express');
 const { 
     sendLeaveRequestNotification,
     sendLeaveStatusNotification,
-    getUserNotifications,
-    getManagerNotifications,
+    getNotifications,
     markNotificationAsRead
 } = require('../controllers/notificationController');
 
@@ -17,13 +16,10 @@ router.post('/leave-request', sendLeaveRequestNotification);
 // Send leave approval/rejection notification to employee
 router.post('/leave-status', sendLeaveStatusNotification);
 
-// Get user notifications
-router.get('/user/:userId', getUserNotifications);
-
-// Get manager notifications from all managed branches
-router.get('/manager/:managerId', getManagerNotifications);
+// Unified notifications API - automatically handles employees and managers
+router.get('/:employeeId', getNotifications);
 
 // Mark notification as read
-router.put('/user/:userId/read/:notificationId', markNotificationAsRead);
+router.put('/:employeeId/read/:notificationId', markNotificationAsRead);
 
 module.exports = router;

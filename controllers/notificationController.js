@@ -25,10 +25,10 @@ const createNotificationRecord = async (notificationData) => {
             status: 'sent'
         };
 
-        // Save to Firestore
-        await db.collection('notifications').doc(notificationId).set(notificationRecord);
+        // Save to Firestore using app_notifications collection
+        await db.collection('app_notifications').doc(notificationId).set(notificationRecord);
         
-        console.log(`✅ Notification record created: ${notificationId}`);
+        console.log(`✅ Notification record created in app_notifications: ${notificationId}`);
         return notificationRecord;
     } catch (error) {
         console.error('❌ Error creating notification record:', error);
@@ -82,26 +82,24 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
 };
 
 // Create in-app notification
-const createInAppNotification = async (userId, title, message, type, data = {}) => {
+const createInAppNotification = async (recipientId, title, message, type, data = {}) => {
     try {
-        const notificationId = uuidv4();
         const notification = {
-            id: notificationId,
-            userId: userId,
+            recipientId: recipientId,
+            senderId: data.employeeId || recipientId, // Use employeeId from data or default to recipient
             title: title,
             message: message,
             type: type,
             data: data,
-            isRead: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            channels: [NOTIFICATION_CHANNELS.IN_APP],
+            isRead: false
         };
 
-        // Save to user's notifications subcollection
-        await db.collection('users').doc(userId).collection('notifications').doc(notificationId).set(notification);
+        // Save to app_notifications collection using createNotificationRecord
+        const savedNotification = await createNotificationRecord(notification);
         
-        console.log(`📱 In-app notification created for user: ${userId}`);
-        return notification;
+        console.log(`📱 In-app notification created for user: ${recipientId}`);
+        return savedNotification;
     } catch (error) {
         console.error('❌ Error creating in-app notification:', error);
         throw error;
@@ -343,130 +341,98 @@ const sendLeaveStatusNotification = async (req, res) => {
 // Removed system announcement to keep costs low - only leave notifications
 
 // Get user notifications
-const getUserNotifications = async (req, res) => {
-    console.log("🚀 Get user notifications called");
+// Unified notification API with role-based filtering
+const getNotifications = async (req, res) => {
+    console.log("🚀 Get notifications called");
     try {
-        const { userId } = req.params;
-        const { page = 1, limit = 20, unreadOnly = false, includeManagedBranches = false } = req.query;
-
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                message: "User ID is required"
-            });
-        }
-
-        let query = db.collection('users').doc(userId).collection('notifications').orderBy('createdAt', 'desc');
-
-        if (unreadOnly === 'true') {
-            query = query.where('isRead', '==', false);
-        }
-
-        const snapshot = await query.limit(parseInt(limit) * parseInt(page)).get();
-        const notifications = [];
-        
-        snapshot.forEach(doc => {
-            notifications.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-
-        // Pagination
-        const totalNotifications = notifications.length;
-        const totalPages = Math.ceil(totalNotifications / limit);
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + parseInt(limit);
-        const paginatedNotifications = notifications.slice(startIndex, endIndex);
-
-        res.json({
-            success: true,
-            message: "User notifications retrieved successfully",
-            data: paginatedNotifications,
-            pagination: {
-                totalNotifications,
-                totalPages,
-                currentPage: parseInt(page),
-                limit: parseInt(limit)
-            }
-        });
-
-    } catch (error) {
-        console.error("❌ Error getting user notifications:", error);
-        res.status(500).json({
-            success: false,
-            message: "Failed to get user notifications",
-            error: error.message
-        });
-    }
-};
-
-// Get manager notifications from all managed branches
-const getManagerNotifications = async (req, res) => {
-    console.log("🚀 Get manager notifications from managed branches called");
-    try {
-        const { managerId } = req.params;
+        const { employeeId } = req.params;
         const { page = 1, limit = 20, unreadOnly = false } = req.query;
 
-        if (!managerId) {
+        if (!employeeId) {
             return res.status(400).json({
                 success: false,
-                message: "Manager ID is required"
+                message: "Employee ID is required"
             });
         }
 
-        // Get manager data to find their managed branches
-        const managerRef = db.collection('employees').doc(managerId);
-        const managerDoc = await managerRef.get();
+        // Get employee data to determine role
+        const employeeRef = db.collection('employees').doc(employeeId);
+        const employeeDoc = await employeeRef.get();
         
-        if (!managerDoc.exists) {
+        if (!employeeDoc.exists) {
             return res.status(404).json({
                 success: false,
-                message: "Manager not found"
+                message: "Employee not found"
             });
         }
 
-        const managerData = managerDoc.data();
-        const managedBranches = managerData.managedBranches || [];
-        
-        console.log(`🔍 Manager ${managerData.firstName} ${managerData.lastName} manages branches: ${managedBranches.join(', ')}`);
+        const employeeData = employeeDoc.data();
+        const isManager = employeeData.role === 'manager';
+        const managedBranches = employeeData.managedBranches || [];
+
+        console.log(`👤 Employee: ${employeeData.firstName} ${employeeData.lastName}`);
+        console.log(`🎭 Role: ${employeeData.role}`);
+        if (isManager) {
+            console.log(`🏢 Managed branches: ${managedBranches.join(', ')}`);
+        }
 
         let allNotifications = [];
 
-        // Get notifications from manager's own notifications
-        const managerNotificationsQuery = db.collection('users').doc(managerId).collection('notifications').orderBy('createdAt', 'desc');
-        const managerSnapshot = await managerNotificationsQuery.get();
+        // Get direct notifications for this employee
+        let directQuery = db.collection('app_notifications')
+            .where('recipientId', '==', employeeId)
+            .orderBy('createdAt', 'desc');
+
+        if (unreadOnly === 'true') {
+            directQuery = directQuery.where('isRead', '==', false);
+        }
+
+        const directSnapshot = await directQuery.limit(parseInt(limit) * 2).get();
         
-        managerSnapshot.forEach(doc => {
+        directSnapshot.forEach(doc => {
             allNotifications.push({
                 id: doc.id,
                 ...doc.data(),
-                source: 'direct' // Direct notification to this manager
+                source: 'direct'
             });
         });
 
-        // Get notifications from all employees in managed branches
-        if (managedBranches.length > 0) {
-            console.log(`🔍 Looking for employees in managed branches: ${managedBranches.join(', ')}`);
+        // If manager, get notifications from managed branches
+        if (isManager && managedBranches.length > 0) {
+            console.log(`🔍 Getting notifications from managed branches: ${managedBranches.join(', ')}`);
             
-            // For now, skip the complex multi-branch notification lookup to avoid timeout
-            // This will be optimized later with proper indexing
-            console.log(`⚠️ Multi-branch notification lookup temporarily disabled to avoid timeout`);
-            console.log(`📋 Manager manages branches: ${managedBranches.join(', ')}`);
-            
-            // TODO: Implement efficient multi-branch notification lookup
-            // This requires proper Firestore indexing or a different approach
-        } else {
-            console.log(`⚠️ Manager has no managedBranches defined`);
+            try {
+                // Get notifications where sender is from managed branches
+                let branchQuery = db.collection('app_notifications')
+                    .where('data.employeeBranch', 'in', managedBranches)
+                    .where('type', 'in', ['leave_request', 'leave_approved', 'leave_rejected'])
+                    .orderBy('createdAt', 'desc');
+
+                if (unreadOnly === 'true') {
+                    branchQuery = branchQuery.where('isRead', '==', false);
+                }
+
+                const branchSnapshot = await branchQuery.limit(parseInt(limit)).get();
+                
+                branchSnapshot.forEach(doc => {
+                    const notificationData = doc.data();
+                    // Avoid duplicates
+                    if (!allNotifications.find(n => n.id === doc.id)) {
+                        allNotifications.push({
+                            id: doc.id,
+                            ...notificationData,
+                            source: 'managed_branch'
+                        });
+                    }
+                });
+            } catch (branchError) {
+                console.error("❌ Error getting branch notifications:", branchError);
+                // Continue without branch notifications if query fails
+            }
         }
 
         // Sort all notifications by creation date (newest first)
         allNotifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-        // Filter unread only if requested
-        if (unreadOnly === 'true') {
-            allNotifications = allNotifications.filter(notification => !notification.isRead);
-        }
 
         // Pagination
         const totalNotifications = allNotifications.length;
@@ -477,12 +443,13 @@ const getManagerNotifications = async (req, res) => {
 
         res.json({
             success: true,
-            message: "Manager notifications from managed branches retrieved successfully",
+            message: "Notifications retrieved successfully",
             data: paginatedNotifications,
-            manager: {
-                id: managerId,
-                name: `${managerData.firstName} ${managerData.lastName}`,
-                managedBranches: managedBranches
+            employee: {
+                id: employeeId,
+                name: `${employeeData.firstName} ${employeeData.lastName}`,
+                role: employeeData.role,
+                managedBranches: isManager ? managedBranches : undefined
             },
             pagination: {
                 totalNotifications,
@@ -493,35 +460,48 @@ const getManagerNotifications = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error getting manager notifications:", error);
+        console.error("❌ Error getting notifications:", error);
         res.status(500).json({
             success: false,
-            message: "Failed to get manager notifications",
+            message: "Failed to get notifications",
             error: error.message
         });
     }
 };
 
+// Old getManagerNotifications function removed - now using unified getNotifications API
+
 // Mark notification as read
 const markNotificationAsRead = async (req, res) => {
     console.log("🚀 Mark notification as read called");
     try {
-        const { userId, notificationId } = req.params;
+        const { employeeId, notificationId } = req.params;
 
-        if (!userId || !notificationId) {
+        if (!employeeId || !notificationId) {
             return res.status(400).json({
                 success: false,
-                message: "User ID and notification ID are required"
+                message: "Employee ID and notification ID are required"
             });
         }
 
-        const notificationRef = db.collection('users').doc(userId).collection('notifications').doc(notificationId);
+        // Use app_notifications collection
+        const notificationRef = db.collection('app_notifications').doc(notificationId);
         const notificationDoc = await notificationRef.get();
 
         if (!notificationDoc.exists) {
             return res.status(404).json({
                 success: false,
                 message: "Notification not found"
+            });
+        }
+
+        const notificationData = notificationDoc.data();
+        
+        // Verify the notification belongs to this employee
+        if (notificationData.recipientId !== employeeId) {
+            return res.status(403).json({
+                success: false,
+                message: "Access denied - notification belongs to another user"
             });
         }
 
@@ -549,8 +529,7 @@ const markNotificationAsRead = async (req, res) => {
 module.exports = {
     sendLeaveRequestNotification,
     sendLeaveStatusNotification,
-    getUserNotifications,
-    getManagerNotifications,
+    getNotifications, // Unified API
     markNotificationAsRead,
     // Export utility functions for use in other controllers
     sendPushNotification,
