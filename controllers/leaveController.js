@@ -594,7 +594,7 @@ const createLeaveRequest = async (req, res) => {
                 // Find all managers that manage this branch
                 // Method 1: Check managers with managedBranches array containing this branch
                 const managersWithManagedBranchesQuery = await employeesRef
-                    .where("role", "==", "manager")
+                    .where("positionName", "==", "manager")
                     .get();
                 
                 const managersWithManagedBranches = [];
@@ -616,7 +616,7 @@ const createLeaveRequest = async (req, res) => {
                 // Method 2: Fallback - find manager in same branch (legacy support)
                 const sameBranchManagerQuery = await employeesRef
                     .where("branch", "==", branchCode)
-                    .where("role", "==", "manager")
+                    .where("positionName", "==", "manager")
                     .limit(1)
                     .get();
                 

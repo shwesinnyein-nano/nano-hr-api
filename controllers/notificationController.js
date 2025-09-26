@@ -366,15 +366,15 @@ const getNotifications = async (req, res) => {
             });
         }
 
-        const employeeData = employeeDoc.data();
-        const isManager = employeeData.role === 'manager';
-        const managedBranches = employeeData.managedBranches || [];
+                const employeeData = employeeDoc.data();
+                const isManager = employeeData.positionName === 'Manager';
+                const managedBranches = employeeData.managedBranches || [];
 
-        console.log(`👤 Employee: ${employeeData.firstName} ${employeeData.lastName}`);
-        console.log(`🎭 Role: ${employeeData.role}`);
-        if (isManager) {
-            console.log(`🏢 Managed branches: ${managedBranches.join(', ')}`);
-        }
+                console.log(`👤 Employee: ${employeeData.firstName} ${employeeData.lastName}`);
+                console.log(`🎭 Position: ${employeeData.positionName}`);
+                if (isManager) {
+                    console.log(`🏢 Managed branches: ${managedBranches.join(', ')}`);
+                }
 
         let allNotifications = [];
 
@@ -421,12 +421,12 @@ const getNotifications = async (req, res) => {
             success: true,
             message: "Notifications retrieved successfully",
             data: paginatedNotifications,
-            employee: {
-                id: employeeId,
-                name: `${employeeData.firstName} ${employeeData.lastName}`,
-                role: employeeData.role,
-                managedBranches: isManager ? managedBranches : undefined
-            },
+                    employee: {
+                        id: employeeId,
+                        name: `${employeeData.firstName} ${employeeData.lastName}`,
+                        positionName: employeeData.positionName,
+                        managedBranches: isManager ? managedBranches : undefined
+                    },
             pagination: {
                 totalNotifications,
                 totalPages,
