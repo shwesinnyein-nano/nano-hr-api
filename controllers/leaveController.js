@@ -877,6 +877,34 @@ const updateLeaveRequestStatus = async (req, res) => {
         if (status === 'approved') {
             updateData.approvedBy = approvedBy; // Store employee ID of approver
             updateData.approvedDate = new Date().toISOString();
+            
+            // Determine specific approval status based on approver role
+            const employeesRef = db.collection("employees");
+            const approverQuery = await employeesRef.where("uid", "==", approvedBy).get();
+            
+            if (!approverQuery.empty) {
+                const approverData = approverQuery.docs[0].data();
+                const approverPosition = approverData.positionName;
+                
+                // Set specific status based on approver role
+                if (approverPosition === 'Manager') {
+                    updateData.status = 'approved_manager';
+                    updateData.statusName = 'Approved by Manager';
+                } else if (approverPosition === 'HR') {
+                    updateData.status = 'approved_hr';
+                    updateData.statusName = 'Approved by HR';
+                } else {
+                    // Final approver or other roles
+                    updateData.status = 'approved';
+                    updateData.statusName = 'Approved';
+                }
+                
+                console.log(`✅ Status set to: ${updateData.status} (Approver: ${approverPosition})`);
+            } else {
+                // Fallback if approver not found
+                updateData.status = 'approved';
+                updateData.statusName = 'Approved';
+            }
         }
 
         if (status === 'rejected') {
@@ -910,7 +938,7 @@ const updateLeaveRequestStatus = async (req, res) => {
             });
 
             // If approved by manager, also notify HR
-            if (status === 'approved') {
+            if (updateData.status === 'approved_manager') {
                 console.log(`🔍 Checking if approver is a manager to notify HR...`);
                 
                 // Get approver data to check if they are a manager
@@ -1069,16 +1097,36 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
         
         console.log(`🔍 Querying for level: ${level}, branch: ${branchCode}, user: ${userId}`);
         
+        // For managers, automatically get their managed branches
+        let managedBranches = [];
+        if (level === "manager" && userId) {
+            try {
+                const employeesRef = db.collection("employees");
+                const managerQuery = await employeesRef.where("uid", "==", userId).get();
+                
+                if (!managerQuery.empty) {
+                    const managerData = managerQuery.docs[0].data();
+                    managedBranches = managerData.managedBranches || [];
+                    
+                    // Fallback: if no managedBranches, use their own branch
+                    if (managedBranches.length === 0 && managerData.branch) {
+                        managedBranches = [managerData.branch];
+                    }
+                    
+                    console.log(`👤 Manager ${userId} manages branches: ${managedBranches.join(', ')}`);
+                } else {
+                    console.log(`⚠️ Manager ${userId} not found`);
+                }
+            } catch (error) {
+                console.error("❌ Error fetching manager data:", error);
+            }
+        }
+        
         let query = db.collection("employee-leave");
         
         // Filter by approval level
         if (level) {
             query = query.where("currentApprover", "==", level);
-        }
-        
-        // Filter by branch (for managers)
-        if (branchCode && level === "manager") {
-            query = query.where("branchCode", "==", branchCode);
         }
         
         // Filter by status (only pending for approval)
@@ -1091,14 +1139,15 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 success: true,
                 message: `No pending leave requests found for ${level} approval`,
                 data: [],
-                count: 0
+                count: 0,
+                managedBranches: managedBranches
             });
         }
         
-        const leaveRequests = [];
+        const allLeaveRequests = [];
         snapshot.forEach(doc => {
             const leaveData = doc.data();
-            leaveRequests.push({
+            allLeaveRequests.push({
                 id: doc.id,
                 uid: leaveData.uid || doc.id,
                 employeeId: leaveData.employeeId,
@@ -1121,6 +1170,23 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
             });
         });
         
+        // Filter by manager's managed branches (if manager level)
+        let leaveRequests = allLeaveRequests;
+        if (level === "manager" && managedBranches.length > 0) {
+            leaveRequests = allLeaveRequests.filter(request => 
+                managedBranches.includes(request.branchCode)
+            );
+            console.log(`🔍 Filtered ${allLeaveRequests.length} requests to ${leaveRequests.length} for managed branches: ${managedBranches.join(', ')}`);
+        }
+        
+        // Also support manual branch filtering (optional)
+        if (branchCode) {
+            leaveRequests = leaveRequests.filter(request => 
+                request.branchCode === branchCode
+            );
+            console.log(`🔍 Further filtered to ${leaveRequests.length} requests for specific branch: ${branchCode}`);
+        }
+        
         // Sort by created date (oldest first for approval queue)
         leaveRequests.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
         
@@ -1128,6 +1194,9 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
             success: true,
             message: `Leave requests for ${level} approval retrieved successfully`,
             count: leaveRequests.length,
+            totalFound: allLeaveRequests.length,
+            managedBranches: managedBranches,
+            filteredByBranch: managedBranches.length > 0 || branchCode,
             data: leaveRequests
         });
         
@@ -1184,9 +1253,11 @@ const approveLeaveRequest = async (req, res) => {
             switch (userRole) {
                 case "manager":
                     nextApprover = "hr";
+                    newStatus = "approved_manager";
                     break;
                 case "hr":
                     nextApprover = "approver";
+                    newStatus = "approved_hr";
                     break;
                 case "approver":
                     nextApprover = null;
@@ -1206,10 +1277,28 @@ const approveLeaveRequest = async (req, res) => {
         // Update leave request
         const updateData = {
             status: newStatus,
-            statusName: newStatus.charAt(0).toUpperCase() + newStatus.slice(1),
+            statusName: getStatusDisplayName(newStatus),
             currentApprover: nextApprover,
             updatedAt: new Date().toISOString()
         };
+        
+        // Helper function to get proper status display names
+        function getStatusDisplayName(status) {
+            switch (status) {
+                case 'approved_manager':
+                    return 'Approved by Manager';
+                case 'approved_hr':
+                    return 'Approved by HR';
+                case 'approved':
+                    return 'Approved';
+                case 'rejected':
+                    return 'Rejected';
+                case 'pending':
+                    return 'Pending';
+                default:
+                    return status.charAt(0).toUpperCase() + status.slice(1);
+            }
+        }
         
         // Add approval history
         const approvalEntry = {

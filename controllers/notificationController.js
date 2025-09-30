@@ -196,21 +196,8 @@ const sendLeaveRequestNotification = async (req, res) => {
             }
         }
 
-        // Create notification record
-        const notificationRecord = await createNotificationRecord({
-            type: NOTIFICATION_TYPES.LEAVE_REQUEST,
-            recipientId: managerId,
-            senderId: employeeId,
-            title: title,
-            message: message,
-            channels: channels,
-            data: {
-                leaveType,
-                fromDate,
-                toDate,
-                reason
-            }
-        });
+        // Note: Notifications are already created by individual channel handlers above
+        // No need for additional createNotificationRecord to avoid duplicates
 
         res.json({
             success: true,
@@ -306,26 +293,13 @@ const sendLeaveStatusNotification = async (req, res) => {
             }
         }
 
-        // Create notification record
-        const notificationRecord = await createNotificationRecord({
-            type: status === 'approved' ? NOTIFICATION_TYPES.LEAVE_APPROVED : NOTIFICATION_TYPES.LEAVE_REJECTED,
-            recipientId: employeeId,
-            senderId: approvedBy,
-            title: title,
-            message: message,
-            channels: channels,
-            data: {
-                leaveRequestId,
-                status,
-                reason
-            }
-        });
+        // Note: Notifications are already created by individual channel handlers above
+        // No need for additional createNotificationRecord to avoid duplicates
 
         res.json({
             success: true,
             message: `Leave ${status} notifications sent successfully (FREE channels only)`,
-            results: results,
-            notificationId: notificationRecord.id
+            results: results
         });
 
     } catch (error) {
