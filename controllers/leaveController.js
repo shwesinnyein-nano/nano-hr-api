@@ -426,6 +426,10 @@ const createLeaveRequest = async (req, res) => {
         // Validation with detailed logging
         console.log("🔍 Validation check:");
         console.log("  - employeeId:", employeeId ? "✅ Present" : "❌ Missing");
+        console.log("  - employeeName:", employeeName ? `✅ Present: ${employeeName}` : "❌ Missing");
+        console.log("  - firstName:", firstName ? `✅ Present: ${firstName}` : "❌ Missing");
+        console.log("  - lastName:", lastName ? `✅ Present: ${lastName}` : "❌ Missing");
+        console.log("  - positionName:", positionName ? `✅ Present: ${positionName}` : "❌ Missing");
         console.log("  - leaveType:", leaveType ? "✅ Present" : "❌ Missing");
         console.log("  - leaveTypeName:", leaveTypeName ? "✅ Present" : "❌ Missing");
         console.log("  - requestType:", requestType ? "✅ Present" : "❌ Missing");
@@ -559,6 +563,16 @@ const createLeaveRequest = async (req, res) => {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
+        
+        console.log("💾 Leave request data to be stored:", JSON.stringify({
+            id: leaveRequestData.id,
+            employeeId: leaveRequestData.employeeId,
+            employeeName: leaveRequestData.employeeName,
+            firstName: leaveRequestData.firstName,
+            lastName: leaveRequestData.lastName,
+            positionName: leaveRequestData.positionName,
+            leaveTypeName: leaveRequestData.leaveTypeName
+        }, null, 2));
 
         // Add daily leave specific fields
         if (requestType === 'daily') {
