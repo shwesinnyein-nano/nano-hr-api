@@ -112,10 +112,11 @@ const sendLeaveRequestNotification = async (req, res) => {
     try {
         const { 
             employeeId, 
+            leaveRequestId, // Add leave request ID
             leaveType, 
             fromDate, 
             toDate, 
-            reason,
+            reason, 
             managerId,
             channels = ['in_app', 'push'] // Only free channels
         } = req.body;
@@ -167,6 +168,7 @@ const sendLeaveRequestNotification = async (req, res) => {
                             const pushResult = await sendPushNotification(deviceTokens, title, message, {
                                 type: 'leave_request',
                                 employeeId: employeeId,
+                                leaveRequestId: leaveRequestId,
                                 leaveType: leaveType
                             });
                             results.push({ channel: 'push', ...pushResult });
@@ -181,7 +183,7 @@ const sendLeaveRequestNotification = async (req, res) => {
                             title,
                             message,
                             NOTIFICATION_TYPES.LEAVE_REQUEST,
-                            { employeeId, leaveType, fromDate, toDate, reason }
+                            { employeeId, leaveRequestId, leaveType, fromDate, toDate, reason }
                         );
                         results.push({ channel: 'in_app', notification: inAppResult });
                         break;

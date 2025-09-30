@@ -671,6 +671,7 @@ const createLeaveRequest = async (req, res) => {
                     sendLeaveRequestNotification({
                         body: {
                             employeeId: employeeId,
+                            leaveRequestId: leaveRequestId, // Add leave request ID
                             leaveType: leaveTypeName,
                             fromDate: fromDate || date,
                             toDate: toDate || date,
@@ -967,7 +968,7 @@ const updateLeaveRequestStatus = async (req, res) => {
                                     `${approverData.firstName} ${approverData.lastName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
                                     'leave_approved_by_manager',
                                     {
-                                        leaveRequestId: leaveId,
+                                        leaveRequestId: leaveId, // Include leave request ID for navigation
                                         employeeId: leaveData.employeeId,
                                         managerId: approvedBy,
                                         managerName: `${approverData.firstName} ${approverData.lastName}`,
@@ -1366,7 +1367,7 @@ const approveLeaveRequest = async (req, res) => {
                             `${approverName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
                             'leave_approved_by_manager',
                             {
-                                leaveRequestId: leaveId,
+                                leaveRequestId: leaveId, // Include leave request ID for navigation
                                 employeeId: leaveData.employeeId,
                                 managerId: userId,
                                 managerName: approverName,
