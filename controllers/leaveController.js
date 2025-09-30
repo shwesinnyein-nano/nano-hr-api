@@ -14,8 +14,8 @@ const initializeFirebaseStorage = async () => {
             return null;
         }
         
-        bucket = admin.storage().bucket();
-        console.log("✅ Firebase Storage bucket initialized successfully");
+    bucket = admin.storage().bucket();
+    console.log("✅ Firebase Storage bucket initialized successfully");
         console.log("Bucket name:", bucket.name);
         
         // Test if bucket exists
@@ -32,8 +32,8 @@ const initializeFirebaseStorage = async () => {
         }
         
         return bucket;
-    } catch (error) {
-        console.error("❌ Firebase Storage initialization error:", error);
+} catch (error) {
+    console.error("❌ Firebase Storage initialization error:", error);
         console.error("Error details:", error.message);
         console.error("Error stack:", error.stack);
         return null;
@@ -406,6 +406,10 @@ const createLeaveRequest = async (req, res) => {
     try {
         const { 
             employeeId, 
+            employeeName,
+            firstName,
+            lastName,
+            positionName,
             leaveType, 
             leaveTypeName, 
             requestType, // 'daily' or 'hourly'
@@ -529,6 +533,10 @@ const createLeaveRequest = async (req, res) => {
             id: leaveRequestId,
             uid: leaveRequestId,
             employeeId: employeeId,
+            employeeName: employeeName,
+            firstName: firstName,
+            lastName: lastName,
+            positionName: positionName,
             leaveType: leaveType,
             leaveTypeName: leaveTypeName,
             requestType: requestType,
@@ -930,6 +938,12 @@ const updateLeaveRequestStatus = async (req, res) => {
                     approvedBy: approvedBy,
                     reason: rejectedReason || `Leave request ${status}`,
                     leaveType: leaveData.leaveTypeName,
+                    fromDate: leaveData.fromDate,
+                    toDate: leaveData.toDate,
+                    employeeName: leaveData.employeeName, // From stored data
+                    firstName: leaveData.firstName,       // From stored data
+                    lastName: leaveData.lastName,         // From stored data
+                    positionName: leaveData.positionName, // From stored data
                     channels: ['in_app', 'push'] // Only FREE channels
                 }
             }, {
@@ -1330,6 +1344,12 @@ const approveLeaveRequest = async (req, res) => {
                     approvedBy: userId,
                     reason: comment || `Leave request ${action} by ${userRole}`,
                     leaveType: leaveData.leaveTypeName,
+                    fromDate: leaveData.fromDate || leaveData.date,
+                    toDate: leaveData.toDate || leaveData.date,
+                    employeeName: leaveData.employeeName, // From stored data
+                    firstName: leaveData.firstName,       // From stored data
+                    lastName: leaveData.lastName,         // From stored data
+                    positionName: leaveData.positionName, // From stored data
                     channels: ['in_app', 'push'] // Only FREE channels
                 }
             }, {

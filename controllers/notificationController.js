@@ -228,6 +228,13 @@ const sendLeaveStatusNotification = async (req, res) => {
             status, // 'approved' or 'rejected'
             approvedBy,
             reason,
+            leaveType,
+            fromDate,
+            toDate,
+            employeeName,
+            firstName,
+            lastName,
+            positionName,
             channels = ['in_app', 'push'] // Only free channels
         } = req.body;
 
@@ -266,7 +273,11 @@ const sendLeaveStatusNotification = async (req, res) => {
                         if (deviceTokens.length > 0) {
                             const pushResult = await sendPushNotification(deviceTokens, title, message, {
                                 type: status === 'approved' ? 'leave_approved' : 'leave_rejected',
-                                leaveRequestId: leaveRequestId
+                                employeeId: employeeId,
+                                leaveRequestId: leaveRequestId,
+                                leaveType: leaveType,
+                                employeeName: employeeName,
+                                positionName: positionName
                             });
                             results.push({ channel: 'push', ...pushResult });
                         } else {
@@ -280,7 +291,19 @@ const sendLeaveStatusNotification = async (req, res) => {
                             title,
                             message,
                             status === 'approved' ? NOTIFICATION_TYPES.LEAVE_APPROVED : NOTIFICATION_TYPES.LEAVE_REJECTED,
-                            { leaveRequestId, status, reason }
+                            { 
+                                employeeId,
+                                leaveRequestId, 
+                                status, 
+                                reason,
+                                leaveType,
+                                fromDate,
+                                toDate,
+                                employeeName,
+                                firstName,
+                                lastName,
+                                positionName
+                            }
                         );
                         results.push({ channel: 'in_app', notification: inAppResult });
                         break;
