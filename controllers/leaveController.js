@@ -1,6 +1,6 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
-const { sendLeaveRequestNotification, sendLeaveStatusNotification } = require('./notificationController');
+const { sendLeaveRequestNotification, sendLeaveStatusNotification, createInAppNotification } = require('./notificationController');
 
 // Initialize Firebase Storage with better error handling
 let bucket;
@@ -594,7 +594,7 @@ const createLeaveRequest = async (req, res) => {
                 // Find all managers that manage this branch
                 // Method 1: Check managers with managedBranches array containing this branch
                 const managersWithManagedBranchesQuery = await employeesRef
-                    .where("positionName", "==", "manager")
+                    .where("positionName", "==", "Manager")
                     .get();
                 
                 const managersWithManagedBranches = [];
@@ -616,7 +616,7 @@ const createLeaveRequest = async (req, res) => {
                 // Method 2: Fallback - find manager in same branch (legacy support)
                 const sameBranchManagerQuery = await employeesRef
                     .where("branch", "==", branchCode)
-                    .where("positionName", "==", "manager")
+                    .where("positionName", "==", "Manager")
                     .limit(1)
                     .get();
                 
@@ -826,7 +826,7 @@ const getAllLeaveRequests = async (req, res) => {
 
 // Update leave request status (approve/reject)
 const updateLeaveRequestStatus = async (req, res) => {
-    console.log("Update leave request status called");
+    console.log("🚀 Update leave request status called");
     try {
         const { leaveId } = req.params;
         const { status, approvedBy, rejectedReason } = req.body;
@@ -842,6 +842,13 @@ const updateLeaveRequestStatus = async (req, res) => {
             return res.status(400).json({ 
                 success: false,
                 message: "Status must be 'approved', 'rejected', or 'pending'" 
+            });
+        }
+
+        if (status === 'approved' && !approvedBy) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Approver employee ID is required for approval" 
             });
         }
 
@@ -866,17 +873,95 @@ const updateLeaveRequestStatus = async (req, res) => {
         };
 
         if (status === 'approved') {
-            updateData.approvedBy = approvedBy;
+            updateData.approvedBy = approvedBy; // Store employee ID of approver
             updateData.approvedDate = new Date().toISOString();
         }
 
         if (status === 'rejected') {
+            updateData.rejectedBy = approvedBy; // Store employee ID of rejecter
+            updateData.rejectedDate = new Date().toISOString();
             updateData.rejectedReason = rejectedReason;
         }
 
         await leaveRequestRef.update(updateData);
 
-        console.log(`Leave request ${leaveId} status updated to ${status}`);
+        console.log(`✅ Leave request ${leaveId} status updated to ${status} by ${approvedBy}`);
+
+        // Send notification to employee about status change (async, don't wait for it)
+        try {
+            console.log(`📤 Sending ${status} notification to employee: ${leaveData.employeeId}`);
+            
+            sendLeaveStatusNotification({
+                body: {
+                    employeeId: leaveData.employeeId,
+                    leaveRequestId: leaveId,
+                    status: status,
+                    approvedBy: approvedBy,
+                    reason: rejectedReason || `Leave request ${status}`,
+                    leaveType: leaveData.leaveTypeName,
+                    channels: ['in_app', 'push'] // Only FREE channels
+                }
+            }, {
+                json: () => {}
+            }).catch(notifError => {
+                console.error(`❌ Failed to send ${status} notification to employee:`, notifError);
+            });
+
+            // If approved by manager, also notify HR
+            if (status === 'approved') {
+                console.log(`🔍 Checking if approver is a manager to notify HR...`);
+                
+                // Get approver data to check if they are a manager
+                const employeesRef = db.collection("employees");
+                const approverQuery = await employeesRef.where("uid", "==", approvedBy).get();
+                
+                if (!approverQuery.empty) {
+                    const approverData = approverQuery.docs[0].data();
+                    console.log(`👤 Approver: ${approverData.firstName} ${approverData.lastName}, Position: ${approverData.positionName}`);
+                    
+                    if (approverData.positionName === 'Manager') {
+                        console.log(`✅ Manager approved - sending notification to HR`);
+                        
+                        // Find HR personnel
+                        const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
+                        
+                        if (!hrQuery.empty) {
+                            hrQuery.forEach(hrDoc => {
+                                const hrData = hrDoc.data();
+                                console.log(`📤 Sending HR notification to: ${hrData.firstName} ${hrData.lastName} (${hrData.uid})`);
+                                
+                                // Create HR notification
+                                createInAppNotification(
+                                    hrData.uid,
+                                    'Manager Approved Leave Request',
+                                    `${approverData.firstName} ${approverData.lastName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
+                                    'leave_approved_by_manager',
+                                    {
+                                        leaveRequestId: leaveId,
+                                        employeeId: leaveData.employeeId,
+                                        managerId: approvedBy,
+                                        managerName: `${approverData.firstName} ${approverData.lastName}`,
+                                        leaveType: leaveData.leaveTypeName,
+                                        fromDate: leaveData.fromDate,
+                                        toDate: leaveData.toDate
+                                    }
+                                ).catch(hrNotifError => {
+                                    console.error(`❌ Failed to send HR notification:`, hrNotifError);
+                                });
+                            });
+                        } else {
+                            console.log(`⚠️ No HR personnel found to notify`);
+                        }
+                    } else {
+                        console.log(`ℹ️ Approver is not a manager (${approverData.positionName}), no HR notification needed`);
+                    }
+                } else {
+                    console.log(`⚠️ Approver ${approvedBy} not found in employees collection`);
+                }
+            }
+        } catch (notifError) {
+            console.error("❌ Error sending notifications:", notifError);
+        }
 
         res.json({
             success: true,
@@ -887,6 +972,8 @@ const updateLeaveRequestStatus = async (req, res) => {
                 statusName: updateData.statusName,
                 approvedBy: updateData.approvedBy,
                 approvedDate: updateData.approvedDate,
+                rejectedBy: updateData.rejectedBy,
+                rejectedDate: updateData.rejectedDate,
                 rejectedReason: updateData.rejectedReason,
                 updatedAt: updateData.updatedAt
             }
@@ -1141,22 +1228,72 @@ const approveLeaveRequest = async (req, res) => {
 
         // Send notification to employee about status change (async, don't wait for it)
         try {
+            console.log(`📤 Sending ${action} notification to employee: ${leaveData.employeeId}`);
+            
             sendLeaveStatusNotification({
                 body: {
                     employeeId: leaveData.employeeId,
                     leaveRequestId: leaveId,
                     status: newStatus,
                     approvedBy: userId,
-                    reason: comment,
+                    reason: comment || `Leave request ${action} by ${userRole}`,
+                    leaveType: leaveData.leaveTypeName,
                     channels: ['in_app', 'push'] // Only FREE channels
                 }
             }, {
                 json: () => {}
             }).catch(notifError => {
-                console.error("❌ Failed to send leave status notification:", notifError);
+                console.error(`❌ Failed to send ${action} notification to employee:`, notifError);
             });
+
+            // If approved by manager, also notify HR
+            if (action === 'approve' && userRole === 'manager') {
+                console.log(`✅ Manager approved - sending notification to HR`);
+                
+                // Get approver data for notification
+                const employeesRef = db.collection("employees");
+                const approverQuery = await employeesRef.where("uid", "==", userId).get();
+                
+                let approverName = userId;
+                if (!approverQuery.empty) {
+                    const approverData = approverQuery.docs[0].data();
+                    approverName = `${approverData.firstName} ${approverData.lastName}`;
+                }
+                
+                // Find HR personnel
+                const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
+                
+                if (!hrQuery.empty) {
+                    hrQuery.forEach(hrDoc => {
+                        const hrData = hrDoc.data();
+                        console.log(`📤 Sending HR notification to: ${hrData.firstName} ${hrData.lastName} (${hrData.uid})`);
+                        
+                        // Create HR notification
+                        createInAppNotification(
+                            hrData.uid,
+                            'Manager Approved Leave Request',
+                            `${approverName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
+                            'leave_approved_by_manager',
+                            {
+                                leaveRequestId: leaveId,
+                                employeeId: leaveData.employeeId,
+                                managerId: userId,
+                                managerName: approverName,
+                                leaveType: leaveData.leaveTypeName,
+                                fromDate: leaveData.fromDate || leaveData.date,
+                                toDate: leaveData.toDate || leaveData.date,
+                                comment: comment
+                            }
+                        ).catch(hrNotifError => {
+                            console.error(`❌ Failed to send HR notification:`, hrNotifError);
+                        });
+                    });
+                } else {
+                    console.log(`⚠️ No HR personnel found to notify`);
+                }
+            }
         } catch (notifError) {
-            console.error("❌ Error sending notification:", notifError);
+            console.error("❌ Error sending notifications:", notifError);
         }
         
         res.json({
