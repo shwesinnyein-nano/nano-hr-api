@@ -596,6 +596,7 @@ const createLeaveRequest = async (req, res) => {
                 const managersWithManagedBranchesQuery = await employeesRef
                     .where("positionName", "==", "Manager")
                     .get();
+                console.log("managersWithManagedBranchesQuery", managersWithManagedBranchesQuery);
                 
                 const managersWithManagedBranches = [];
                 managersWithManagedBranchesQuery.forEach(doc => {
@@ -619,7 +620,7 @@ const createLeaveRequest = async (req, res) => {
                     .where("positionName", "==", "Manager")
                     .limit(1)
                     .get();
-                
+                console.log("sameBranchManagerQuery", sameBranchManagerQuery);
                 const sameBranchManagers = [];
                 sameBranchManagerQuery.forEach(doc => {
                     const managerData = doc.data();
@@ -631,10 +632,11 @@ const createLeaveRequest = async (req, res) => {
                         branch: managerData.branch
                     });
                 });
-                
+                console.log("managersWithManagedBranches", managersWithManagedBranches);
+                console.log("sameBranchManagers", sameBranchManagers);
                 // Combine both methods
                 const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
-                
+                console.log("allManagers", allManagers);
                 // Remove duplicates based on ID
                 const uniqueManagers = allManagers.filter((manager, index, self) => 
                     index === self.findIndex(m => m.id === manager.id)
