@@ -543,11 +543,11 @@ const createLeaveRequest = async (req, res) => {
         
         // Fallback: Get employee data if company/location/branch not provided
         if (!finalCompany || !finalCompanyName || !finalLocation || !finalLocationName || !finalBranch || !finalBranchName) {
-            const employeesRef = db.collection("employees");
-            const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
-            
-            if (!employeeQuery.empty) {
-                const employeeData = employeeQuery.docs[0].data();
+        const employeesRef = db.collection("employees");
+        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+        
+        if (!employeeQuery.empty) {
+            const employeeData = employeeQuery.docs[0].data();
                 finalCompany = finalCompany || employeeData.company || "NANO";
                 finalCompanyName = finalCompanyName || employeeData.companyName || "NANO Company";
                 finalLocation = finalLocation || employeeData.location || "BKK";
