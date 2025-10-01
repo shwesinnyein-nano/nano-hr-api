@@ -410,6 +410,13 @@ const createLeaveRequest = async (req, res) => {
             firstName,
             lastName,
             positionName,
+            company,        // Add company code
+            companyName,    // Add company name
+            location,       // Add location code
+            locationName,   // Add location name
+            branch,         // Add branch code
+            branchName,     // Add branch name
+            requestDate,    // Add request date
             leaveType, 
             leaveTypeName, 
             requestType, // 'daily' or 'hourly'
@@ -430,6 +437,13 @@ const createLeaveRequest = async (req, res) => {
         console.log("  - firstName:", firstName ? `✅ Present: ${firstName}` : "❌ Missing");
         console.log("  - lastName:", lastName ? `✅ Present: ${lastName}` : "❌ Missing");
         console.log("  - positionName:", positionName ? `✅ Present: ${positionName}` : "❌ Missing");
+        console.log("  - company:", company ? `✅ Present: ${company}` : "❌ Missing");
+        console.log("  - companyName:", companyName ? `✅ Present: ${companyName}` : "❌ Missing");
+        console.log("  - location:", location ? `✅ Present: ${location}` : "❌ Missing");
+        console.log("  - locationName:", locationName ? `✅ Present: ${locationName}` : "❌ Missing");
+        console.log("  - branch:", branch ? `✅ Present: ${branch}` : "❌ Missing");
+        console.log("  - branchName:", branchName ? `✅ Present: ${branchName}` : "❌ Missing");
+        console.log("  - requestDate:", requestDate ? `✅ Present: ${requestDate}` : "❌ Missing");
         console.log("  - leaveType:", leaveType ? "✅ Present" : "❌ Missing");
         console.log("  - leaveTypeName:", leaveTypeName ? "✅ Present" : "❌ Missing");
         console.log("  - requestType:", requestType ? "✅ Present" : "❌ Missing");
@@ -519,20 +533,44 @@ const createLeaveRequest = async (req, res) => {
             attachmentData = attachment;
         }
 
-        // Get employee data to extract branch information
-        const employeesRef = db.collection("employees");
-        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+        // Use provided company/location/branch data, with fallback to employee data
+        let finalCompany = company;
+        let finalCompanyName = companyName;
+        let finalLocation = location;
+        let finalLocationName = locationName;
+        let finalBranch = branch;
+        let finalBranchName = branchName;
         
-        let branchCode = "001"; // Default branch
-        let branchName = "Main Branch";
-        
-        if (!employeeQuery.empty) {
-            const employeeData = employeeQuery.docs[0].data();
-            branchCode = employeeData.branch || "001";
-            branchName = employeeData.branchName || "Main Branch";
+        // Fallback: Get employee data if company/location/branch not provided
+        if (!finalCompany || !finalCompanyName || !finalLocation || !finalLocationName || !finalBranch || !finalBranchName) {
+            const employeesRef = db.collection("employees");
+            const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+            
+            if (!employeeQuery.empty) {
+                const employeeData = employeeQuery.docs[0].data();
+                finalCompany = finalCompany || employeeData.company || "NANO";
+                finalCompanyName = finalCompanyName || employeeData.companyName || "NANO Company";
+                finalLocation = finalLocation || employeeData.location || "BKK";
+                finalLocationName = finalLocationName || employeeData.locationName || "Bangkok";
+                finalBranch = finalBranch || employeeData.branch || "001";
+                finalBranchName = finalBranchName || employeeData.branchName || "Main Branch";
+            } else {
+                // Ultimate fallback
+                finalCompany = finalCompany || "NANO";
+                finalCompanyName = finalCompanyName || "NANO Company";
+                finalLocation = finalLocation || "BKK";
+                finalLocationName = finalLocationName || "Bangkok";
+                finalBranch = finalBranch || "001";
+                finalBranchName = finalBranchName || "Main Branch";
+            }
         }
+        
+        console.log(`🏢 Company: ${finalCompany} (${finalCompanyName})`);
+        console.log(`📍 Location: ${finalLocation} (${finalLocationName})`);
+        console.log(`🏪 Branch: ${finalBranch} (${finalBranchName})`);
 
         // Create leave request data
+        const currentDateTime = new Date().toISOString();
         const leaveRequestData = {
             id: leaveRequestId,
             uid: leaveRequestId,
@@ -541,6 +579,14 @@ const createLeaveRequest = async (req, res) => {
             firstName: firstName,
             lastName: lastName,
             positionName: positionName,
+            company: finalCompany,           // Store company code
+            companyName: finalCompanyName,   // Store company name
+            location: finalLocation,         // Store location code
+            locationName: finalLocationName, // Store location name
+            branch: finalBranch,             // Store branch code
+            branchName: finalBranchName,     // Store branch name
+            branchCode: finalBranch,         // Legacy compatibility
+            requestDate: requestDate || currentDateTime.split('T')[0], // Use provided date or current date (YYYY-MM-DD)
             leaveType: leaveType,
             leaveTypeName: leaveTypeName,
             requestType: requestType,
@@ -551,17 +597,8 @@ const createLeaveRequest = async (req, res) => {
             // Approval workflow fields
             approvalLevel: "employee",
             currentApprover: "manager",
-            branchCode: branchCode,
-            branchName: branchName,
-            approvalHistory: [{
-                level: "employee",
-                action: "submitted",
-                userId: employeeId,
-                timestamp: new Date().toISOString(),
-                comment: "Leave request submitted"
-            }],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            createdAt: currentDateTime,
+            updatedAt: currentDateTime
         };
         
         console.log("💾 Leave request data to be stored:", JSON.stringify({
@@ -571,6 +608,13 @@ const createLeaveRequest = async (req, res) => {
             firstName: leaveRequestData.firstName,
             lastName: leaveRequestData.lastName,
             positionName: leaveRequestData.positionName,
+            company: leaveRequestData.company,
+            companyName: leaveRequestData.companyName,
+            location: leaveRequestData.location,
+            locationName: leaveRequestData.locationName,
+            branch: leaveRequestData.branch,
+            branchName: leaveRequestData.branchName,
+            requestDate: leaveRequestData.requestDate,
             leaveTypeName: leaveRequestData.leaveTypeName
         }, null, 2));
 
@@ -1184,6 +1228,14 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 firstName: leaveData.firstName,
                 lastName: leaveData.lastName,
                 positionName: leaveData.positionName,
+                company: leaveData.company,
+                companyName: leaveData.companyName,
+                location: leaveData.location,
+                locationName: leaveData.locationName,
+                branch: leaveData.branch,
+                branchName: leaveData.branchName,
+                branchCode: leaveData.branchCode || leaveData.branch, // Legacy compatibility
+                requestDate: leaveData.requestDate,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
                 requestType: leaveData.requestType || 'daily',
@@ -1193,8 +1245,6 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 reason: leaveData.reason,
                 status: leaveData.status,
                 statusName: leaveData.statusName,
-                branchCode: leaveData.branchCode,
-                branchName: leaveData.branchName,
                 currentApprover: leaveData.currentApprover,
                 approvalLevel: leaveData.approvalLevel,
                 approvalHistory: leaveData.approvalHistory || [],
