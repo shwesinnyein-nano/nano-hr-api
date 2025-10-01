@@ -1299,7 +1299,9 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
 
 // Approve leave request (multi-level)
 const approveLeaveRequest = async (req, res) => {
-    console.log("🚀 Approve leave request called");
+    console.log("🚀 Approve/Reject leave request called");
+    console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+    console.log("🔍 Request params:", JSON.stringify(req.params, null, 2));
     try {
         const { leaveId } = req.params;
         const { userId, userRole, comment, action } = req.body; // action: approve/reject
