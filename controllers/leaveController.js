@@ -1180,6 +1180,10 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 id: doc.id,
                 uid: leaveData.uid || doc.id,
                 employeeId: leaveData.employeeId,
+                employeeName: leaveData.employeeName,
+                firstName: leaveData.firstName,
+                lastName: leaveData.lastName,
+                positionName: leaveData.positionName,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
                 requestType: leaveData.requestType || 'daily',
@@ -1199,13 +1203,20 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
             });
         });
         
-        // Filter by manager's managed branches (if manager level)
+        // Filter by manager's managed branches and employee position (if manager level)
         let leaveRequests = allLeaveRequests;
         if (level === "manager" && managedBranches.length > 0) {
-            leaveRequests = allLeaveRequests.filter(request => 
-                managedBranches.includes(request.branchCode)
-            );
-            console.log(`🔍 Filtered ${allLeaveRequests.length} requests to ${leaveRequests.length} for managed branches: ${managedBranches.join(', ')}`);
+            leaveRequests = allLeaveRequests.filter(request => {
+                // Check if request is from manager's managed branches
+                const fromManagedBranch = managedBranches.includes(request.branchCode);
+                
+                // Check if request is from Salesman (managers can approve salesman requests)
+                const fromSalesman = request.positionName === "Salesman";
+                
+                // Manager can see requests from their managed branches AND from salesmen
+                return fromManagedBranch && fromSalesman;
+            });
+            console.log(`🔍 Filtered ${allLeaveRequests.length} requests to ${leaveRequests.length} for managed branches: ${managedBranches.join(', ')} and Salesman position`);
         }
         
         // Also support manual branch filtering (optional)
@@ -1226,6 +1237,14 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
             totalFound: allLeaveRequests.length,
             managedBranches: managedBranches,
             filteredByBranch: managedBranches.length > 0 || branchCode,
+            filterCriteria: {
+                level: level,
+                userId: userId,
+                branchCode: branchCode,
+                managedBranches: managedBranches,
+                positionFilter: level === "manager" ? "Salesman" : null,
+                statusFilter: "pending"
+            },
             data: leaveRequests
         });
         
