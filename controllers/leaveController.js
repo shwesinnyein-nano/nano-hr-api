@@ -1180,7 +1180,15 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
         }
         
         // Filter by status (only pending for approval)
-        query = query.where("status", "==", "pending");
+        if(level === "manager"){
+            query = query.where("status", "==", "pending");
+        }
+        if(level === "hr"){
+            query = query.where("status", "==", "approved_manager");
+        }
+        if(level === "approver"){
+            query = query.where("status", "==", "approved_hr");
+        }
         
         const snapshot = await query.get();
         
