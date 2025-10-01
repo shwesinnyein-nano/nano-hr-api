@@ -1481,13 +1481,13 @@ const approveLeaveRequest = async (req, res) => {
                     hrApproverName = `${hrApproverData.firstName} ${hrApproverData.lastName}`;
                 }
                 
-                // Find final Approver personnel (you may need to adjust the positionName)
-                const finalApproverQuery = await employeesRef.where("positionName", "==", "Approver").get();
+                // Find final Approver personnel by role (support multiple approver roles)
+                const finalApproverQuery = await employeesRef.where("role", "in", ["approver", "approver-two"]).get();
                 
                 if (!finalApproverQuery.empty) {
                     finalApproverQuery.forEach(approverDoc => {
                         const approverData = approverDoc.data();
-                        console.log(`📤 Sending Approver notification to: ${approverData.firstName} ${approverData.lastName} (${approverData.uid})`);
+                        console.log(`📤 Sending Approver notification to: ${approverData.firstName} ${approverData.lastName} (${approverData.uid}) - Role: ${approverData.role}`);
                         
                         // Create Approver notification
                         createInAppNotification(
