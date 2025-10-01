@@ -1206,16 +1206,21 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
         }
         
         // Filter by status (only pending for approval)
+        // Note: HR needs to see both "pending" (manager's own requests) and "approved_manager" (regular employee requests)
         console.log("level", level);
         console.log("userId", userId);
         if(level === "manager"){
             query = query.where("status", "==", "pending");
         }
         if(level === "hr"){
-            query = query.where("status", "==", "approved_manager");
+            // HR sees: "pending" (manager requests) OR "approved_manager" (regular employee requests)
+            // Since Firestore doesn't support OR in same field, we filter by currentApprover only
+            // and handle status in post-processing
+            query = query.where("status", "in", ["pending", "approved_manager"]);
         }
         if(level === "approver"){
-            query = query.where("status", "==", "approved_hr");
+            // Approver sees: "pending" (HR requests) OR "approved_hr" (regular flow)
+            query = query.where("status", "in", ["pending", "approved_hr"]);
         }
         
         const snapshot = await query.get();
