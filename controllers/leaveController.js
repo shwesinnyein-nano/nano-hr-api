@@ -6,22 +6,16 @@ const { sendLeaveRequestNotification, sendLeaveStatusNotification, createInAppNo
 let bucket;
 const initializeFirebaseStorage = async () => {
     try {
-        console.log("🔄 Initializing Firebase Storage...");
-        console.log("Admin apps:", admin.apps.length);
-        
         if (admin.apps.length === 0) {
             console.error("❌ Firebase Admin not initialized");
             return null;
         }
         
     bucket = admin.storage().bucket();
-    console.log("✅ Firebase Storage bucket initialized successfully");
-        console.log("Bucket name:", bucket.name);
         
         // Test if bucket exists
         try {
             const [exists] = await bucket.exists();
-            console.log("Bucket exists:", exists);
             if (!exists) {
                 console.error("❌ Storage bucket does not exist");
                 return null;
@@ -34,8 +28,6 @@ const initializeFirebaseStorage = async () => {
         return bucket;
 } catch (error) {
     console.error("❌ Firebase Storage initialization error:", error);
-        console.error("Error details:", error.message);
-        console.error("Error stack:", error.stack);
         return null;
     }
 };
@@ -53,7 +45,6 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
     try {
         // Retry initialization if bucket is null
         if (!bucket) {
-            console.log("🔄 Bucket is null, retrying initialization...");
             bucket = await initializeFirebaseStorage();
             if (!bucket) {
                 throw new Error("Firebase Storage bucket not initialized after retry");
@@ -89,7 +80,6 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
                     // Get the public URL
                     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
                     
-                    console.log(`✅ File uploaded successfully: ${publicUrl}`);
                     resolve({
                         fileName: fileName,
                         originalName: file.originalname,
@@ -113,7 +103,6 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
 
 // Get leave settings list
 const getLeaveSettings = async (req, res) => {
-    console.log("Get leave settings called");
     try {
         const { gender, employeeId } = req.query;
         
@@ -145,7 +134,6 @@ const getLeaveSettings = async (req, res) => {
                 employeeEligible = monthsWithCompany >= 3;
                 employeeGender = employeeData.gender;
                 
-                console.log(`Employee ${employeeId}: ${monthsWithCompany} months with company, Gender: ${employeeGender}, Eligible: ${employeeEligible}`);
                 
                 // If not eligible, return empty array immediately
                 if (!employeeEligible) {
@@ -253,7 +241,6 @@ const getLeaveSettings = async (req, res) => {
 
 // Get employee leave list filtered by UID
 const getEmployeeLeaveList = async (req, res) => {
-    console.log("Get employee leave list called");
     try {
         const { uid } = req.params;
         
@@ -284,9 +271,6 @@ const getEmployeeLeaveList = async (req, res) => {
         const monthsDiff = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
                           (today.getMonth() - joinDate.getMonth());
         
-        console.log(`Employee join date: ${joinDate.toISOString()}`);
-        console.log(`Today: ${today.toISOString()}`);
-        console.log(`Months with company: ${monthsDiff}`);
 
         // Check if employee has been with company for 3+ months
         if (monthsDiff < 3) {
@@ -302,14 +286,11 @@ const getEmployeeLeaveList = async (req, res) => {
         }
 
         // Get employee leave records filtered by employeeId (login user UID)
-        console.log(`🔍 Querying employee-leave table for employeeId: ${employeeData.uid}`);
         const employeeLeaveRef = db.collection("employee-leave");
         
         // First, let's check if there are any records in the employee-leave table at all
         const allRecordsSnapshot = await employeeLeaveRef.limit(5).get();
-        console.log(`📊 Total records in employee-leave table: ${allRecordsSnapshot.size}`);
         if (!allRecordsSnapshot.empty) {
-            console.log(`📋 Sample records:`, allRecordsSnapshot.docs.map(doc => ({
                 id: doc.id,
                 employeeId: doc.data().employeeId,
                 leaveType: doc.data().leaveType
@@ -317,7 +298,6 @@ const getEmployeeLeaveList = async (req, res) => {
         }
         
         const querySnapshot = await employeeLeaveRef.where("employeeId", "==", employeeData.uid).get();
-        console.log(`📊 Found ${querySnapshot.size} leave records for employeeId: ${employeeData.uid}`);
 
         if (querySnapshot.empty) {
             return res.json({
@@ -333,7 +313,6 @@ const getEmployeeLeaveList = async (req, res) => {
         const leaveRecords = [];
         querySnapshot.forEach(doc => {
             const leaveData = doc.data();
-            console.log(`📝 Processing leave record:`, {
                 docId: doc.id,
                 employeeId: leaveData.employeeId,
                 leaveType: leaveData.leaveType,
@@ -434,7 +413,6 @@ const createLeaveRequest = async (req, res) => {
             if (!requestType) missingFields.push("requestType");
             if (!reason) missingFields.push("reason");
             
-            console.log("❌ Missing required fields:", missingFields.join(", "));
             return res.status(400).json({ 
                 success: false,
                 message: `Missing required fields: ${missingFields.join(", ")}`,
@@ -484,7 +462,6 @@ const createLeaveRequest = async (req, res) => {
         // Handle file uploads
         let attachmentData = null;
         if (req.files && req.files.length > 0) {
-            console.log(`📎 Processing ${req.files.length} file(s) for upload`);
             try {
                 const uploadedFiles = [];
                 for (const file of req.files) {
@@ -496,7 +473,6 @@ const createLeaveRequest = async (req, res) => {
                     count: uploadedFiles.length,
                     uploadedAt: new Date().toISOString()
                 };
-                console.log(`✅ Successfully uploaded ${uploadedFiles.length} file(s)`);
             } catch (uploadError) {
                 console.error("❌ File upload failed:", uploadError);
                 return res.status(500).json({
@@ -542,9 +518,6 @@ const createLeaveRequest = async (req, res) => {
             }
         }
         
-        console.log(`🏢 Company: ${finalCompany} (${finalCompanyName})`);
-        console.log(`📍 Location: ${finalLocation} (${finalLocationName})`);
-        console.log(`🏪 Branch: ${finalBranch} (${finalBranchName})`);
 
         // Get employee data to check their role (for approver auto-approval)
         const employeesRef = db.collection("employees");
@@ -568,18 +541,14 @@ const createLeaveRequest = async (req, res) => {
             firstApprover = null;
             initialStatus = "approved";
             initialStatusName = "Approved";
-            console.log(`👑 Final Approver requesting leave - auto-approving`);
         } else if (positionName === "Manager") {
             // Manager requests leave → Skip manager level, go to HR
             firstApprover = "hr";
-            console.log(`👔 Manager requesting leave - routing to HR`);
         } else if (positionName === "HR") {
             // HR requests leave → Skip both manager and HR, go to final approver
             firstApprover = "approver";
-            console.log(`👥 HR requesting leave - routing to final Approver`);
         } else {
             // Regular employee → Standard workflow starts with manager
-            console.log(`👤 Regular employee requesting leave - routing to Manager`);
         }
 
         // Create leave request data
@@ -614,7 +583,6 @@ const createLeaveRequest = async (req, res) => {
             updatedAt: currentDateTime
         };
         
-        console.log("💾 Leave request data to be stored:", JSON.stringify({
             id: leaveRequestData.id,
             employeeId: leaveRequestData.employeeId,
             employeeName: leaveRequestData.employeeName,
@@ -653,13 +621,11 @@ const createLeaveRequest = async (req, res) => {
         const leaveRequestDoc = await leaveRequestRef.get();
         const savedLeaveRequest = leaveRequestDoc.data();
 
-        console.log(`Leave request created for employee: ${employeeId}`);
 
         // Send notification to appropriate approver based on routing (async, don't wait for it)
         // Skip notification if auto-approved (firstApprover is null)
         if (firstApprover !== null) {
             try {
-                console.log(`📤 Sending notification to ${firstApprover} level`);
                 let approverIds = [];
                 
                 // Get employee data to find their manager
@@ -673,7 +639,6 @@ const createLeaveRequest = async (req, res) => {
                 // Route notification based on firstApprover
                 if (firstApprover === "manager") {
                     // Find managers for this branch
-                    console.log(`🔍 Looking for manager for branch: ${branchCode}`);
                     
                     const managersWithManagedBranchesQuery = await employeesRef
                         .where("positionName", "==", "Manager")
@@ -716,41 +681,33 @@ const createLeaveRequest = async (req, res) => {
                     );
                     
                     approverIds = uniqueManagers.map(manager => manager.uid);
-                    console.log(`✅ Found ${approverIds.length} manager(s)`);
                     
                 } else if (firstApprover === "hr") {
                     // Find HR personnel
-                    console.log(`🔍 Looking for HR personnel`);
                     const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
                     
                     hrQuery.forEach(doc => {
                         const hrData = doc.data();
                         approverIds.push(hrData.uid);
                     });
-                    console.log(`✅ Found ${approverIds.length} HR personnel`);
                     
                 } else if (firstApprover === "approver") {
                     // Find final approvers
-                    console.log(`🔍 Looking for final approvers`);
                     const approverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
                     
                     approverQuery.forEach(doc => {
                         const approverData = doc.data();
                         approverIds.push(approverData.uid);
                     });
-                    console.log(`✅ Found ${approverIds.length} final approver(s)`);
                 }
                 
                 if (approverIds.length === 0) {
-                    console.log(`⚠️ No approvers found for level: ${firstApprover}`);
                 }
             } else {
-                console.log(`⚠️ Employee not found`);
             }
             
             // Send notifications to all found approvers
             if (approverIds.length > 0) {
-                console.log(`📤 Sending notifications to ${approverIds.length} approver(s) at ${firstApprover} level`);
                 
                 for (const approverId of approverIds) {
                     sendLeaveRequestNotification({
@@ -771,16 +728,13 @@ const createLeaveRequest = async (req, res) => {
                         console.error(`❌ Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
                     });
                     
-                    console.log(`📤 Notification sent to ${firstApprover}: ${approverId}`);
                 }
             } else {
-                console.log(`❌ No ${firstApprover} found, notification not sent`);
             }
             } catch (notifError) {
                 console.error("❌ Error sending notification:", notifError);
             }
         } else {
-            console.log(`👑 Auto-approved - No notification sent`);
         }
 
         res.json({
@@ -827,7 +781,6 @@ const createLeaveRequest = async (req, res) => {
 
 // Get all leave requests (for admin/HR)
 const getAllLeaveRequests = async (req, res) => {
-    console.log("Get all leave requests called");
     try {
         const { status, employeeId, page = 1, limit = 10 } = req.query;
         
@@ -918,7 +871,6 @@ const getAllLeaveRequests = async (req, res) => {
 
 // Update leave request status (approve/reject)
 const updateLeaveRequestStatus = async (req, res) => {
-    console.log("🚀 Update leave request status called");
     try {
         const { leaveId } = req.params;
         const { status, approvedBy, rejectedReason } = req.body;
@@ -989,7 +941,6 @@ const updateLeaveRequestStatus = async (req, res) => {
                     updateData.statusName = 'Approved';
                 }
                 
-                console.log(`✅ Status set to: ${updateData.status} (Approver: ${approverPosition})`);
             } else {
                 // Fallback if approver not found
                 updateData.status = 'approved';
@@ -1005,11 +956,9 @@ const updateLeaveRequestStatus = async (req, res) => {
 
         await leaveRequestRef.update(updateData);
 
-        console.log(`✅ Leave request ${leaveId} status updated to ${status} by ${approvedBy}`);
 
         // Send notification to employee about status change (async, don't wait for it)
         try {
-            console.log(`📤 Sending ${status} notification to employee: ${leaveData.employeeId}`);
             
             sendLeaveStatusNotification({
                 body: {
@@ -1035,7 +984,6 @@ const updateLeaveRequestStatus = async (req, res) => {
 
             // If approved by manager, also notify HR
             if (updateData.status === 'approved_manager') {
-                console.log(`🔍 Checking if approver is a manager to notify HR...`);
                 
                 // Get approver data to check if they are a manager
                 const employeesRef = db.collection("employees");
@@ -1043,10 +991,8 @@ const updateLeaveRequestStatus = async (req, res) => {
                 
                 if (!approverQuery.empty) {
                     const approverData = approverQuery.docs[0].data();
-                    console.log(`👤 Approver: ${approverData.firstName} ${approverData.lastName}, Position: ${approverData.positionName}`);
                     
                     if (approverData.positionName === 'Manager') {
-                        console.log(`✅ Manager approved - sending notification to HR`);
                         
                         // Find HR personnel
                         const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
@@ -1054,9 +1000,7 @@ const updateLeaveRequestStatus = async (req, res) => {
                         if (!hrQuery.empty) {
                             hrQuery.forEach(hrDoc => {
                                 const hrData = hrDoc.data();
-                                console.log(`📤 Sending HR notification to: ${hrData.firstName} ${hrData.lastName} (${hrData.uid})`);
                                 // Ensure recipientId is correct
-                                console.log(`🔍 Verifying recipientId for HR: ${hrData.uid}`);
                                 
                                 // Create HR notification
                                 createInAppNotification(
@@ -1078,13 +1022,10 @@ const updateLeaveRequestStatus = async (req, res) => {
                                 });
                             });
                         } else {
-                            console.log(`⚠️ No HR personnel found to notify`);
                         }
                     } else {
-                        console.log(`ℹ️ Approver is not a manager (${approverData.positionName}), no HR notification needed`);
                     }
                 } else {
-                    console.log(`⚠️ Approver ${approvedBy} not found in employees collection`);
                 }
             }
         } catch (notifError) {
@@ -1119,7 +1060,6 @@ const updateLeaveRequestStatus = async (req, res) => {
 
 // Get leave request by ID
 const getLeaveRequestById = async (req, res) => {
-    console.log("Get leave request by ID called");
     try {
         const { leaveId } = req.params;
         
@@ -1189,11 +1129,9 @@ const getLeaveRequestById = async (req, res) => {
 
 // Get leave requests by approval level and branch
 const getLeaveRequestsByApprovalLevel = async (req, res) => {
-    console.log("🚀 Get leave requests by approval level called");
     try {
         const { level, branchCode, userId } = req.query;
         
-        console.log(`🔍 Querying for level: ${level}, branch: ${branchCode}, user: ${userId}`);
         
         // For managers, automatically get their managed branches
         let managedBranches = [];
@@ -1211,9 +1149,7 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                         managedBranches = [managerData.branch];
                     }
                     
-                    console.log(`👤 Manager ${userId} manages branches: ${managedBranches.join(', ')}`);
                 } else {
-                    console.log(`⚠️ Manager ${userId} not found`);
                 }
             } catch (error) {
                 console.error("❌ Error fetching manager data:", error);
@@ -1229,8 +1165,6 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
         
         // Filter by status (only pending for approval)
         // Note: HR needs to see both "pending" (manager's own requests) and "approved_manager" (regular employee requests)
-        console.log("level", level);
-        console.log("userId", userId);
         if(level === "manager"){
             query = query.where("status", "==", "pending");
         }
@@ -1306,7 +1240,6 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 // Manager can see requests from their managed branches AND from salesmen
                 return fromManagedBranch && fromSalesman;
             });
-            console.log(`🔍 Filtered ${allLeaveRequests.length} requests to ${leaveRequests.length} for managed branches: ${managedBranches.join(', ')} and Salesman position`);
         }
         
         // Also support manual branch filtering (optional) - ONLY for managers
@@ -1314,11 +1247,9 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
             leaveRequests = leaveRequests.filter(request => 
                 request.branchCode === branchCode
             );
-            console.log(`🔍 Further filtered to ${leaveRequests.length} requests for specific branch: ${branchCode}`);
         }
         
         // HR and approver see ALL requests (no branch filtering)
-        console.log(`📋 ${level} level - Total requests: ${leaveRequests.length}`);
         
         // Sort by created date (oldest first for approval queue)
         leaveRequests.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -1382,7 +1313,6 @@ const approveLeaveRequest = async (req, res) => {
         const actualUserRole = userData.role; // For approvers
         const actualPositionName = userData.positionName; // For manager and HR
         
-        console.log(`👤 User ${userId} - role: ${actualUserRole}, position: ${actualPositionName}, leave requires: ${leaveData.currentApprover}`);
         
         // Check permission based on approval level
         // Manager and HR: Check positionName
@@ -1478,11 +1408,9 @@ const approveLeaveRequest = async (req, res) => {
         
         await leaveRequestRef.update(updateData);
         
-        console.log(`✅ Leave request ${leaveId} ${action} by ${userApprovalLevel}`);
 
         // Send notification to employee about status change (async, don't wait for it)
         try {
-            console.log(`📤 Sending ${action} notification to employee: ${leaveData.employeeId}`);
             
             sendLeaveStatusNotification({
                 body: {
@@ -1508,7 +1436,6 @@ const approveLeaveRequest = async (req, res) => {
 
             // If approved by manager, also notify HR
             if (action === 'approve' && userApprovalLevel === 'manager') {
-                console.log(`✅ Manager approved - sending notification to HR`);
                 
                 // Get approver data for notification
                 const employeesRef = db.collection("employees");
@@ -1526,7 +1453,6 @@ const approveLeaveRequest = async (req, res) => {
                 if (!hrQuery.empty) {
                     hrQuery.forEach(hrDoc => {
                         const hrData = hrDoc.data();
-                        console.log(`📤 Sending HR notification to: ${hrData.firstName} ${hrData.lastName} (${hrData.uid})`);
                         
                         // Create HR notification
                         createInAppNotification(
@@ -1549,13 +1475,11 @@ const approveLeaveRequest = async (req, res) => {
                         });
                     });
                 } else {
-                    console.log(`⚠️ No HR personnel found to notify`);
                 }
             }
             
             // If approved by HR, also notify final Approver
             if (action === 'approve' && userApprovalLevel === 'hr') {
-                console.log(`✅ HR approved - sending notification to final Approver`);
                 
                 // Get HR data for notification
                 const employeesRef = db.collection("employees");
@@ -1573,7 +1497,6 @@ const approveLeaveRequest = async (req, res) => {
                 if (!finalApproverQuery.empty) {
                     finalApproverQuery.forEach(approverDoc => {
                         const approverData = approverDoc.data();
-                        console.log(`📤 Sending Approver notification to: ${approverData.firstName} ${approverData.lastName} (${approverData.uid}) - Role: ${approverData.role}`);
                         
                         // Create Approver notification
                         createInAppNotification(
@@ -1596,7 +1519,6 @@ const approveLeaveRequest = async (req, res) => {
                         });
                     });
                 } else {
-                    console.log(`⚠️ No final Approver personnel found to notify`);
                 }
             }
         } catch (notifError) {
