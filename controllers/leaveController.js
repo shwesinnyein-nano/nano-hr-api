@@ -1334,7 +1334,7 @@ const approveLeaveRequest = async (req, res) => {
         // Special handling: both "approver" and "approver-two" can approve at "approver" level
         const canApprove = 
             leaveData.currentApprover === actualUserRole || 
-            (leaveData.currentApprover === "approver" && (actualUserRole === "approver" || actualUserRole === "approver-two"));
+            (leaveData.currentApprover === "approver" && (actualUserRole === "approver" || actualUserRole === "approver-three"));
         
         if (!canApprove) {
             return res.status(403).json({ 
@@ -1358,7 +1358,7 @@ const approveLeaveRequest = async (req, res) => {
                     newStatus = "approved_hr";
                     break;
                 case "approver":
-                case "approver-two":
+                case "approver-three":
                     nextApprover = null;
                     newStatus = "approved";
                     break;
@@ -1504,7 +1504,7 @@ const approveLeaveRequest = async (req, res) => {
                 }
                 
                 // Find final Approver personnel by role (support multiple approver roles)
-                const finalApproverQuery = await employeesRef.where("role", "in", ["approver", "approver-two"]).get();
+                const finalApproverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
                 
                 if (!finalApproverQuery.empty) {
                     finalApproverQuery.forEach(approverDoc => {
