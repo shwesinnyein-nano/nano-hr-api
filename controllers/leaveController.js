@@ -1466,6 +1466,53 @@ const approveLeaveRequest = async (req, res) => {
                     console.log(`⚠️ No HR personnel found to notify`);
                 }
             }
+            
+            // If approved by HR, also notify final Approver
+            if (action === 'approve' && userRole === 'hr') {
+                console.log(`✅ HR approved - sending notification to final Approver`);
+                
+                // Get HR data for notification
+                const employeesRef = db.collection("employees");
+                const hrApproverQuery = await employeesRef.where("uid", "==", userId).get();
+                
+                let hrApproverName = userId;
+                if (!hrApproverQuery.empty) {
+                    const hrApproverData = hrApproverQuery.docs[0].data();
+                    hrApproverName = `${hrApproverData.firstName} ${hrApproverData.lastName}`;
+                }
+                
+                // Find final Approver personnel (you may need to adjust the positionName)
+                const finalApproverQuery = await employeesRef.where("positionName", "==", "Approver").get();
+                
+                if (!finalApproverQuery.empty) {
+                    finalApproverQuery.forEach(approverDoc => {
+                        const approverData = approverDoc.data();
+                        console.log(`📤 Sending Approver notification to: ${approverData.firstName} ${approverData.lastName} (${approverData.uid})`);
+                        
+                        // Create Approver notification
+                        createInAppNotification(
+                            approverData.uid,
+                            'HR Approved Leave Request',
+                            `${hrApproverName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
+                            'leave_approved_by_hr',
+                            {
+                                leaveRequestId: leaveId,
+                                employeeId: leaveData.employeeId,
+                                hrId: userId,
+                                hrName: hrApproverName,
+                                leaveType: leaveData.leaveTypeName,
+                                fromDate: leaveData.fromDate || leaveData.date,
+                                toDate: leaveData.toDate || leaveData.date,
+                                comment: comment
+                            }
+                        ).catch(approverNotifError => {
+                            console.error(`❌ Failed to send Approver notification:`, approverNotifError);
+                        });
+                    });
+                } else {
+                    console.log(`⚠️ No final Approver personnel found to notify`);
+                }
+            }
         } catch (notifError) {
             console.error("❌ Error sending notifications:", notifError);
         }
