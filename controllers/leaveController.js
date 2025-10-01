@@ -1331,7 +1331,12 @@ const approveLeaveRequest = async (req, res) => {
         console.log(`👤 User ${userId} has role: ${actualUserRole}, leave requires: ${leaveData.currentApprover}`);
         
         // Check if user's actual role matches what's required for this approval level
-        if (leaveData.currentApprover !== actualUserRole) {
+        // Special handling: both "approver" and "approver-two" can approve at "approver" level
+        const canApprove = 
+            leaveData.currentApprover === actualUserRole || 
+            (leaveData.currentApprover === "approver" && (actualUserRole === "approver" || actualUserRole === "approver-two"));
+        
+        if (!canApprove) {
             return res.status(403).json({ 
                 success: false,
                 message: `You don't have permission to approve at ${leaveData.currentApprover} level. Your role is: ${actualUserRole}` 
