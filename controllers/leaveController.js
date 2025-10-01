@@ -1180,6 +1180,8 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
         }
         
         // Filter by status (only pending for approval)
+        console.log("level", level);
+        console.log("userId", userId);
         if(level === "manager"){
             query = query.where("status", "==", "pending");
         }
@@ -1254,13 +1256,16 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
             console.log(`🔍 Filtered ${allLeaveRequests.length} requests to ${leaveRequests.length} for managed branches: ${managedBranches.join(', ')} and Salesman position`);
         }
         
-        // Also support manual branch filtering (optional)
-        if (branchCode) {
+        // Also support manual branch filtering (optional) - ONLY for managers
+        if (branchCode && level === "manager") {
             leaveRequests = leaveRequests.filter(request => 
                 request.branchCode === branchCode
             );
             console.log(`🔍 Further filtered to ${leaveRequests.length} requests for specific branch: ${branchCode}`);
         }
+        
+        // HR and approver see ALL requests (no branch filtering)
+        console.log(`📋 ${level} level - Total requests: ${leaveRequests.length}`);
         
         // Sort by created date (oldest first for approval queue)
         leaveRequests.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
