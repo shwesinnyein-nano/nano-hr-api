@@ -546,13 +546,30 @@ const createLeaveRequest = async (req, res) => {
         console.log(`📍 Location: ${finalLocation} (${finalLocationName})`);
         console.log(`🏪 Branch: ${finalBranch} (${finalBranchName})`);
 
-        // Determine first approver based on requester's position
+        // Get employee data to check their role (for approver auto-approval)
+        const employeesRef = db.collection("employees");
+        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+        
+        let employeeRole = null;
+        if (!employeeQuery.empty) {
+            const employeeData = employeeQuery.docs[0].data();
+            employeeRole = employeeData.role;
+        }
+        
+        // Determine first approver based on requester's position/role
         // This prevents people from approving their own leave requests
         let firstApprover = "manager";  // Default for regular employees
         let initialStatus = "pending";
         let initialStatusName = "Pending";
         
-        if (positionName === "Manager") {
+        // Check if requester is a final approver (highest level)
+        if (employeeRole === "approver" || employeeRole === "approver-three") {
+            // Approver requests leave → Auto-approve (no one above them)
+            firstApprover = null;
+            initialStatus = "approved";
+            initialStatusName = "Approved";
+            console.log(`👑 Final Approver requesting leave - auto-approving`);
+        } else if (positionName === "Manager") {
             // Manager requests leave → Skip manager level, go to HR
             firstApprover = "hr";
             console.log(`👔 Manager requesting leave - routing to HR`);
@@ -639,13 +656,15 @@ const createLeaveRequest = async (req, res) => {
         console.log(`Leave request created for employee: ${employeeId}`);
 
         // Send notification to appropriate approver based on routing (async, don't wait for it)
-        try {
-            console.log(`📤 Sending notification to ${firstApprover} level`);
-            let approverIds = [];
-            
-            // Get employee data to find their manager
-            const employeesRef = db.collection("employees");
-            const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+        // Skip notification if auto-approved (firstApprover is null)
+        if (firstApprover !== null) {
+            try {
+                console.log(`📤 Sending notification to ${firstApprover} level`);
+                let approverIds = [];
+                
+                // Get employee data to find their manager
+                const employeesRef = db.collection("employees");
+                const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
             
             if (!employeeQuery.empty) {
                 const employeeData = employeeQuery.docs[0].data();
@@ -757,8 +776,11 @@ const createLeaveRequest = async (req, res) => {
             } else {
                 console.log(`❌ No ${firstApprover} found, notification not sent`);
             }
-        } catch (notifError) {
-            console.error("❌ Error sending notification:", notifError);
+            } catch (notifError) {
+                console.error("❌ Error sending notification:", notifError);
+            }
+        } else {
+            console.log(`👑 Auto-approved - No notification sent`);
         }
 
         res.json({
