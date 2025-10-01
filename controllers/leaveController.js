@@ -1326,29 +1326,41 @@ const approveLeaveRequest = async (req, res) => {
         }
         
         const userData = userQuery.docs[0].data();
-        const actualUserRole = userData.role; // Get actual role from database
+        const actualUserRole = userData.role; // For approvers
+        const actualPositionName = userData.positionName; // For manager and HR
         
-        console.log(`👤 User ${userId} has role: ${actualUserRole}, leave requires: ${leaveData.currentApprover}`);
+        console.log(`👤 User ${userId} - role: ${actualUserRole}, position: ${actualPositionName}, leave requires: ${leaveData.currentApprover}`);
         
-        // Check if user's actual role matches what's required for this approval level
-        // Special handling: both "approver" and "approver-two" can approve at "approver" level
-        const canApprove = 
-            leaveData.currentApprover === actualUserRole || 
-            (leaveData.currentApprover === "approver" && (actualUserRole === "approver" || actualUserRole === "approver-three"));
+        // Check permission based on approval level
+        // Manager and HR: Check positionName
+        // Approver: Check role
+        let canApprove = false;
+        let userApprovalLevel = null;
+        
+        if (leaveData.currentApprover === "manager" && actualPositionName === "Manager") {
+            canApprove = true;
+            userApprovalLevel = "manager";
+        } else if (leaveData.currentApprover === "hr" && actualPositionName === "HR") {
+            canApprove = true;
+            userApprovalLevel = "hr";
+        } else if (leaveData.currentApprover === "approver" && (actualUserRole === "approver" || actualUserRole === "approver-three")) {
+            canApprove = true;
+            userApprovalLevel = "approver";
+        }
         
         if (!canApprove) {
             return res.status(403).json({ 
                 success: false,
-                message: `You don't have permission to approve at ${leaveData.currentApprover} level. Your role is: ${actualUserRole}` 
+                message: `You don't have permission to approve at ${leaveData.currentApprover} level. Your position: ${actualPositionName}, role: ${actualUserRole}` 
             });
         }
         
-        // Determine next approval level based on actual user role
+        // Determine next approval level based on current approval level
         let nextApprover = null;
         let newStatus = "pending";
         
         if (action === "approve") {
-            switch (actualUserRole) {
+            switch (userApprovalLevel) {
                 case "manager":
                     nextApprover = "hr";
                     newStatus = "approved_manager";
@@ -1358,14 +1370,13 @@ const approveLeaveRequest = async (req, res) => {
                     newStatus = "approved_hr";
                     break;
                 case "approver":
-                case "approver-three":
                     nextApprover = null;
                     newStatus = "approved";
                     break;
                 default:
                     return res.status(400).json({ 
                         success: false,
-                        message: "Invalid user role for approval" 
+                        message: "Invalid user level for approval" 
                     });
             }
         } else if (action === "reject") {
@@ -1401,11 +1412,11 @@ const approveLeaveRequest = async (req, res) => {
         
         // Add approval history
         const approvalEntry = {
-            level: actualUserRole,
+            level: userApprovalLevel,
             action: action,
             userId: userId,
             timestamp: new Date().toISOString(),
-            comment: comment || `${action} by ${actualUserRole}`
+            comment: comment || `${action} by ${userApprovalLevel}`
         };
         
         const currentHistory = leaveData.approvalHistory || [];
@@ -1414,7 +1425,7 @@ const approveLeaveRequest = async (req, res) => {
         
         await leaveRequestRef.update(updateData);
         
-        console.log(`✅ Leave request ${leaveId} ${action} by ${actualUserRole}`);
+        console.log(`✅ Leave request ${leaveId} ${action} by ${userApprovalLevel}`);
 
         // Send notification to employee about status change (async, don't wait for it)
         try {
@@ -1426,7 +1437,7 @@ const approveLeaveRequest = async (req, res) => {
                     leaveRequestId: leaveId,
                     status: newStatus,
                     approvedBy: userId,
-                    reason: comment || `Leave request ${action} by ${actualUserRole}`,
+                    reason: comment || `Leave request ${action} by ${userApprovalLevel}`,
                     leaveType: leaveData.leaveTypeName,
                     fromDate: leaveData.fromDate || leaveData.date,
                     toDate: leaveData.toDate || leaveData.date,
@@ -1443,7 +1454,7 @@ const approveLeaveRequest = async (req, res) => {
             });
 
             // If approved by manager, also notify HR
-            if (action === 'approve' && actualUserRole === 'manager') {
+            if (action === 'approve' && userApprovalLevel === 'manager') {
                 console.log(`✅ Manager approved - sending notification to HR`);
                 
                 // Get approver data for notification
@@ -1490,7 +1501,7 @@ const approveLeaveRequest = async (req, res) => {
             }
             
             // If approved by HR, also notify final Approver
-            if (action === 'approve' && actualUserRole === 'hr') {
+            if (action === 'approve' && userApprovalLevel === 'hr') {
                 console.log(`✅ HR approved - sending notification to final Approver`);
                 
                 // Get HR data for notification
