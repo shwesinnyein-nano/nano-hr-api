@@ -546,6 +546,25 @@ const createLeaveRequest = async (req, res) => {
         console.log(`📍 Location: ${finalLocation} (${finalLocationName})`);
         console.log(`🏪 Branch: ${finalBranch} (${finalBranchName})`);
 
+        // Determine first approver based on requester's position
+        // This prevents people from approving their own leave requests
+        let firstApprover = "manager";  // Default for regular employees
+        let initialStatus = "pending";
+        let initialStatusName = "Pending";
+        
+        if (positionName === "Manager") {
+            // Manager requests leave → Skip manager level, go to HR
+            firstApprover = "hr";
+            console.log(`👔 Manager requesting leave - routing to HR`);
+        } else if (positionName === "HR") {
+            // HR requests leave → Skip both manager and HR, go to final approver
+            firstApprover = "approver";
+            console.log(`👥 HR requesting leave - routing to final Approver`);
+        } else {
+            // Regular employee → Standard workflow starts with manager
+            console.log(`👤 Regular employee requesting leave - routing to Manager`);
+        }
+
         // Create leave request data
         const currentDateTime = new Date().toISOString();
         const leaveRequestData = {
@@ -569,11 +588,11 @@ const createLeaveRequest = async (req, res) => {
             requestType: requestType,
             reason: reason,
             attachment: attachmentData,
-            status: "pending",
-            statusName: "Pending",
+            status: initialStatus,
+            statusName: initialStatusName,
             // Approval workflow fields
             approvalLevel: "employee",
-            currentApprover: "manager",
+            currentApprover: firstApprover,  // Smart routing based on position
             createdAt: currentDateTime,
             updatedAt: currentDateTime
         };
@@ -619,10 +638,10 @@ const createLeaveRequest = async (req, res) => {
 
         console.log(`Leave request created for employee: ${employeeId}`);
 
-        // Send notification to manager (async, don't wait for it)
+        // Send notification to appropriate approver based on routing (async, don't wait for it)
         try {
-            // Find manager for this employee - supporting managedBranches array
-            let managerIds = [];
+            console.log(`📤 Sending notification to ${firstApprover} level`);
+            let approverIds = [];
             
             // Get employee data to find their manager
             const employeesRef = db.collection("employees");
@@ -632,104 +651,111 @@ const createLeaveRequest = async (req, res) => {
                 const employeeData = employeeQuery.docs[0].data();
                 const branchCode = employeeData.branch || "001";
                 
-                console.log(`🔍 Looking for manager for branch: ${branchCode}`);
-                
-                // Find all managers that manage this branch
-                // Method 1: Check managers with managedBranches array containing this branch
-                const managersWithManagedBranchesQuery = await employeesRef
-                    .where("positionName", "==", "Manager")
-                    .get();
-                console.log("managersWithManagedBranchesQuery", managersWithManagedBranchesQuery);
-                
-                const managersWithManagedBranches = [];
-                managersWithManagedBranchesQuery.forEach(doc => {
-                    const managerData = doc.data();
-                    if (managerData.managedBranches && Array.isArray(managerData.managedBranches)) {
-                        if (managerData.managedBranches.includes(branchCode)) {
-                            managersWithManagedBranches.push({
-                                id: doc.id,
-                                uid: managerData.uid,
-                                firstName: managerData.firstName,
-                                lastName: managerData.lastName,
-                                managedBranches: managerData.managedBranches
-                            });
-                        }
-                    }
-                });
-                
-                // Method 2: Fallback - find manager in same branch (legacy support)
-                const sameBranchManagerQuery = await employeesRef
-                    .where("branch", "==", branchCode)
-                    .where("positionName", "==", "Manager")
-                    .limit(1)
-                    .get();
-                console.log("sameBranchManagerQuery", sameBranchManagerQuery);
-                const sameBranchManagers = [];
-                sameBranchManagerQuery.forEach(doc => {
-                    const managerData = doc.data();
-                    sameBranchManagers.push({
-                        id: doc.id,
-                        uid: managerData.uid,
-                        firstName: managerData.firstName,
-                        lastName: managerData.lastName,
-                        branch: managerData.branch
-                    });
-                });
-                
-                const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
-                console.log("allManagers", allManagers);
-                // Remove duplicates based on ID
-                const uniqueManagers = allManagers.filter((manager, index, self) => 
-                    index === self.findIndex(m => m.id === manager.id)
-                );
-                
-                managerIds = uniqueManagers.map(manager => manager.id);
-                
-                if (managerIds.length > 0) {
-                    console.log(`✅ Found ${managerIds.length} manager(s) for branch: ${branchCode}`);
-                    uniqueManagers.forEach(manager => {
-                        console.log(`   - Manager: ${manager.firstName} ${manager.lastName} (ID: ${manager.id})`);
-                        if (manager.managedBranches) {
-                            console.log(`     Managed branches: ${manager.managedBranches.join(', ')}`);
+                // Route notification based on firstApprover
+                if (firstApprover === "manager") {
+                    // Find managers for this branch
+                    console.log(`🔍 Looking for manager for branch: ${branchCode}`);
+                    
+                    const managersWithManagedBranchesQuery = await employeesRef
+                        .where("positionName", "==", "Manager")
+                        .get();
+                    
+                    const managersWithManagedBranches = [];
+                    managersWithManagedBranchesQuery.forEach(doc => {
+                        const managerData = doc.data();
+                        if (managerData.managedBranches && Array.isArray(managerData.managedBranches)) {
+                            if (managerData.managedBranches.includes(branchCode)) {
+                                managersWithManagedBranches.push({
+                                    id: doc.id,
+                                    uid: managerData.uid,
+                                    firstName: managerData.firstName,
+                                    lastName: managerData.lastName
+                                });
+                            }
                         }
                     });
-                } else {
-                    // Fallback: use the employee themselves as manager (for testing)
-                    managerIds = [employeeId];
-                    console.log(`⚠️ No manager found for branch ${branchCode}, using employee as manager`);
+                    
+                    // Fallback - find manager in same branch
+                    const sameBranchManagerQuery = await employeesRef
+                        .where("branch", "==", branchCode)
+                        .where("positionName", "==", "Manager")
+                        .limit(1)
+                        .get();
+                    
+                    const sameBranchManagers = [];
+                    sameBranchManagerQuery.forEach(doc => {
+                        const managerData = doc.data();
+                        sameBranchManagers.push({
+                            id: doc.id,
+                            uid: managerData.uid
+                        });
+                    });
+                    
+                    const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
+                    const uniqueManagers = allManagers.filter((manager, index, self) => 
+                        index === self.findIndex(m => m.id === manager.id)
+                    );
+                    
+                    approverIds = uniqueManagers.map(manager => manager.uid);
+                    console.log(`✅ Found ${approverIds.length} manager(s)`);
+                    
+                } else if (firstApprover === "hr") {
+                    // Find HR personnel
+                    console.log(`🔍 Looking for HR personnel`);
+                    const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
+                    
+                    hrQuery.forEach(doc => {
+                        const hrData = doc.data();
+                        approverIds.push(hrData.uid);
+                    });
+                    console.log(`✅ Found ${approverIds.length} HR personnel`);
+                    
+                } else if (firstApprover === "approver") {
+                    // Find final approvers
+                    console.log(`🔍 Looking for final approvers`);
+                    const approverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
+                    
+                    approverQuery.forEach(doc => {
+                        const approverData = doc.data();
+                        approverIds.push(approverData.uid);
+                    });
+                    console.log(`✅ Found ${approverIds.length} final approver(s)`);
+                }
+                
+                if (approverIds.length === 0) {
+                    console.log(`⚠️ No approvers found for level: ${firstApprover}`);
                 }
             } else {
-                // Fallback: use the employee themselves as manager
-                managerIds = [employeeId];
-                console.log(`⚠️ Employee not found, using employee ID as manager`);
+                console.log(`⚠️ Employee not found`);
             }
             
-            // Send notifications to all found managers
-            if (managerIds.length > 0) {
-                console.log(`📤 Sending notifications to ${managerIds.length} manager(s)`);
+            // Send notifications to all found approvers
+            if (approverIds.length > 0) {
+                console.log(`📤 Sending notifications to ${approverIds.length} approver(s) at ${firstApprover} level`);
                 
-                for (const managerId of managerIds) {
+                for (const approverId of approverIds) {
                     sendLeaveRequestNotification({
                         body: {
                             employeeId: employeeId,
-                            leaveRequestId: leaveRequestId, // Add leave request ID
+                            leaveRequestId: leaveRequestId,
                             leaveType: leaveTypeName,
                             fromDate: fromDate || date,
                             toDate: toDate || date,
                             reason: reason,
-                            managerId: managerId,
-                            channels: ['in_app', 'push'] // Only FREE channels
+                            managerId: approverId,  // Keep field name for compatibility
+                            approverLevel: firstApprover,  // Add which level this is
+                            channels: ['in_app', 'push']
                         }
                     }, {
                         json: () => {}
                     }).catch(notifError => {
-                        console.error(`❌ Failed to send leave request notification to manager ${managerId}:`, notifError);
+                        console.error(`❌ Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
                     });
                     
-                    console.log(`📤 Notification sent to manager: ${managerId}`);
+                    console.log(`📤 Notification sent to ${firstApprover}: ${approverId}`);
                 }
             } else {
-                console.log(`❌ No manager found, notification not sent`);
+                console.log(`❌ No ${firstApprover} found, notification not sent`);
             }
         } catch (notifError) {
             console.error("❌ Error sending notification:", notifError);
