@@ -1284,17 +1284,6 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
             success: true,
             message: `Leave requests for ${level} approval retrieved successfully`,
             count: leaveRequests.length,
-            totalFound: allLeaveRequests.length,
-            managedBranches: managedBranches,
-            filteredByBranch: managedBranches.length > 0 || branchCode,
-            filterCriteria: {
-                level: level,
-                userId: userId,
-                branchCode: branchCode,
-                managedBranches: managedBranches,
-                positionFilter: level === "manager" ? "Salesman" : null,
-                statusFilter: "pending"
-            },
             data: leaveRequests
         });
         
