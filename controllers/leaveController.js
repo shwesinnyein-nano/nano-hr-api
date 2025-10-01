@@ -290,12 +290,6 @@ const getEmployeeLeaveList = async (req, res) => {
         
         // First, let's check if there are any records in the employee-leave table at all
         const allRecordsSnapshot = await employeeLeaveRef.limit(5).get();
-        if (!allRecordsSnapshot.empty) {
-                id: doc.id,
-                employeeId: doc.data().employeeId,
-                leaveType: doc.data().leaveType
-            })));
-        }
         
         const querySnapshot = await employeeLeaveRef.where("employeeId", "==", employeeData.uid).get();
 
@@ -313,13 +307,6 @@ const getEmployeeLeaveList = async (req, res) => {
         const leaveRecords = [];
         querySnapshot.forEach(doc => {
             const leaveData = doc.data();
-                docId: doc.id,
-                employeeId: leaveData.employeeId,
-                leaveType: leaveData.leaveType,
-                status: leaveData.status,
-                createdAt: leaveData.createdAt,
-                allFields: Object.keys(leaveData)
-            });
             leaveRecords.push({
                 id: doc.id,
                 uid: leaveData.uid || doc.id,
@@ -582,22 +569,6 @@ const createLeaveRequest = async (req, res) => {
             createdAt: currentDateTime,
             updatedAt: currentDateTime
         };
-        
-            id: leaveRequestData.id,
-            employeeId: leaveRequestData.employeeId,
-            employeeName: leaveRequestData.employeeName,
-            firstName: leaveRequestData.firstName,
-            lastName: leaveRequestData.lastName,
-            positionName: leaveRequestData.positionName,
-            company: leaveRequestData.company,
-            companyName: leaveRequestData.companyName,
-            location: leaveRequestData.location,
-            locationName: leaveRequestData.locationName,
-            branch: leaveRequestData.branch,
-            branchName: leaveRequestData.branchName,
-            requestDate: leaveRequestData.requestDate,
-            leaveTypeName: leaveRequestData.leaveTypeName
-        }, null, 2));
 
         // Add daily leave specific fields
         if (requestType === 'daily') {
