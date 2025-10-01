@@ -83,20 +83,31 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
 
 // Create in-app notification
 const createInAppNotification = async (recipientId, title, message, type, data = {}) => {
+    console.log("🚀 Create in-app notification called");
+    console.log("📝 Notification data:", JSON.stringify(data, null, 2));
+    console.log("📝 Notification type:", type);
+    console.log("📝 Notification recipient:", recipientId);
+    console.log("📝 Notification sender:", data.employeeId || recipientId);
+    console.log("📝 Notification title:", title);
+    console.log("📝 Notification message:", message);
     try {
-        const notification = {
+        // Ensure all fields in the data object are defined
+        const notificationData = {
             recipientId: recipientId,
-            senderId: data.employeeId || recipientId, // Use employeeId from data or default to recipient
+            senderId: data.employeeId || recipientId,
             title: title,
             message: message,
             type: type,
-            data: data,
+            data: {
+                ...data,
+                comment: data.comment || '' // Provide a default value if comment is undefined
+            },
             channels: [NOTIFICATION_CHANNELS.IN_APP],
             isRead: false
         };
 
-        // Save to app_notifications collection using createNotificationRecord
-        const savedNotification = await createNotificationRecord(notification);
+        // Create notification record
+        const savedNotification = await createNotificationRecord(notificationData);
         
         console.log(`📱 In-app notification created for user: ${recipientId}`);
         return savedNotification;

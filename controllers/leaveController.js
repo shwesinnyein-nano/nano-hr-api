@@ -396,13 +396,7 @@ const getEmployeeLeaveList = async (req, res) => {
 
 // Create leave request with file upload support
 const createLeaveRequest = async (req, res) => {
-    console.log("🚀 Create leave request called");
-    console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
-    console.log("📋 Request headers:", JSON.stringify(req.headers, null, 2));
-    console.log("🔧 Request method:", req.method);
-    console.log("🌐 Request URL:", req.url);
-    console.log("📊 Request query:", JSON.stringify(req.query, null, 2));
-    console.log("📎 Files:", req.files ? req.files.length : 0);
+   
     try {
         const { 
             employeeId, 
@@ -430,24 +424,7 @@ const createLeaveRequest = async (req, res) => {
             attachment 
         } = req.body;
         
-        // Validation with detailed logging
-        console.log("🔍 Validation check:");
-        console.log("  - employeeId:", employeeId ? "✅ Present" : "❌ Missing");
-        console.log("  - employeeName:", employeeName ? `✅ Present: ${employeeName}` : "❌ Missing");
-        console.log("  - firstName:", firstName ? `✅ Present: ${firstName}` : "❌ Missing");
-        console.log("  - lastName:", lastName ? `✅ Present: ${lastName}` : "❌ Missing");
-        console.log("  - positionName:", positionName ? `✅ Present: ${positionName}` : "❌ Missing");
-        console.log("  - company:", company ? `✅ Present: ${company}` : "❌ Missing");
-        console.log("  - companyName:", companyName ? `✅ Present: ${companyName}` : "❌ Missing");
-        console.log("  - location:", location ? `✅ Present: ${location}` : "❌ Missing");
-        console.log("  - locationName:", locationName ? `✅ Present: ${locationName}` : "❌ Missing");
-        console.log("  - branch:", branch ? `✅ Present: ${branch}` : "❌ Missing");
-        console.log("  - branchName:", branchName ? `✅ Present: ${branchName}` : "❌ Missing");
-        console.log("  - requestDate:", requestDate ? `✅ Present: ${requestDate}` : "❌ Missing");
-        console.log("  - leaveType:", leaveType ? "✅ Present" : "❌ Missing");
-        console.log("  - leaveTypeName:", leaveTypeName ? "✅ Present" : "❌ Missing");
-        console.log("  - requestType:", requestType ? "✅ Present" : "❌ Missing");
-        console.log("  - reason:", reason ? "✅ Present" : "❌ Missing");
+        
         
         if (!employeeId || !leaveType || !leaveTypeName || !requestType || !reason) {
             const missingFields = [];
@@ -698,9 +675,7 @@ const createLeaveRequest = async (req, res) => {
                         branch: managerData.branch
                     });
                 });
-                console.log("managersWithManagedBranches", managersWithManagedBranches);
-                console.log("sameBranchManagers", sameBranchManagers);
-                // Combine both methods
+                
                 const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
                 console.log("allManagers", allManagers);
                 // Remove duplicates based on ID
@@ -1032,6 +1007,8 @@ const updateLeaveRequestStatus = async (req, res) => {
                             hrQuery.forEach(hrDoc => {
                                 const hrData = hrDoc.data();
                                 console.log(`📤 Sending HR notification to: ${hrData.firstName} ${hrData.lastName} (${hrData.uid})`);
+                                // Ensure recipientId is correct
+                                console.log(`🔍 Verifying recipientId for HR: ${hrData.uid}`);
                                 
                                 // Create HR notification
                                 createInAppNotification(
@@ -1299,9 +1276,7 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
 
 // Approve leave request (multi-level)
 const approveLeaveRequest = async (req, res) => {
-    console.log("🚀 Approve/Reject leave request called");
-    console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
-    console.log("🔍 Request params:", JSON.stringify(req.params, null, 2));
+    
     try {
         const { leaveId } = req.params;
         const { userId, userRole, comment, action } = req.body; // action: approve/reject
