@@ -522,9 +522,6 @@ const createLeaveRequest = async (req, res) => {
         let initialStatus = "pending";
         let initialStatusName = "Pending";
         
-        // Define positions that go through normal manager approval
-        const requiresManagerApproval = ["Salesman", "Programmer"];
-        
         // Check if requester is a final approver (highest level)
         if (employeeRole === "approver" || employeeRole === "approver-three") {
             // Approver requests leave → Auto-approve (no one above them)
@@ -537,11 +534,14 @@ const createLeaveRequest = async (req, res) => {
         } else if (positionName === "HR") {
             // HR requests leave → Skip both manager and HR, go to final approver
             firstApprover = "approver";
-        } else if (requiresManagerApproval.includes(positionName)) {
-            // Salesman and Programmer → Go through manager approval
+        } else if (positionName === "Programmer") {
+            // Programmer → Go to Team Lead first
+            firstApprover = "team-lead";
+        } else if (positionName === "Salesman") {
+            // Salesman → Go through manager approval
             firstApprover = "manager";
         } else {
-            // Other positions (excluding Programmer and Salesman) → Skip manager, go to HR directly
+            // Other positions → Skip manager, go to HR directly
             firstApprover = "hr";
         }
 
@@ -659,6 +659,18 @@ const createLeaveRequest = async (req, res) => {
                     );
                     
                     approverIds = uniqueManagers.map(manager => manager.uid);
+                    
+                } else if (firstApprover === "team-lead") {
+                    // Find Team Lead (Programmer with additionalRole = "team lead")
+                    const teamLeadQuery = await employeesRef
+                        .where("positionName", "==", "Programmer")
+                        .where("additionalRole", "==", "team lead")
+                        .get();
+                    
+                    teamLeadQuery.forEach(doc => {
+                        const teamLeadData = doc.data();
+                        approverIds.push(teamLeadData.uid);
+                    });
                     
                 } else if (firstApprover === "hr") {
                     // Find HR personnel
@@ -1142,15 +1154,16 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
         }
         
         // Filter by status (only pending for approval)
-        // Note: HR needs to see both "pending" (manager's own requests) and "approved_manager" (regular employee requests)
+        if(level === "team-lead"){
+            // Team Lead sees: "pending" (Programmer requests)
+            query = query.where("status", "==", "pending");
+        }
         if(level === "manager"){
             query = query.where("status", "==", "pending");
         }
         if(level === "hr"){
-            // HR sees: "pending" (manager requests) OR "approved_manager" (regular employee requests)
-            // Since Firestore doesn't support OR in same field, we filter by currentApprover only
-            // and handle status in post-processing
-            query = query.where("status", "in", ["pending", "approved_manager"]);
+            // HR sees: "pending" (manager/other position requests) OR "approved_manager" (salesman) OR "approved_team_lead" (programmer)
+            query = query.where("status", "in", ["pending", "approved_manager", "approved_team_lead"]);
         }
         if(level === "approver"){
             // Approver sees: "pending" (HR requests) OR "approved_hr" (regular flow)
@@ -1289,16 +1302,20 @@ const approveLeaveRequest = async (req, res) => {
         
         const userData = userQuery.docs[0].data();
         const actualUserRole = userData.role; // For approvers
-        const actualPositionName = userData.positionName; // For manager and HR
+        const actualPositionName = userData.positionName; // For manager, HR, and team lead
+        const actualAdditionalRole = userData.additionalRole; // For team lead
         
         
         // Check permission based on approval level
-        // Manager and HR: Check positionName
+        // Team Lead, Manager, HR: Check positionName (and additionalRole for team lead)
         // Approver: Check role
         let canApprove = false;
         let userApprovalLevel = null;
         
-        if (leaveData.currentApprover === "manager" && actualPositionName === "Manager") {
+        if (leaveData.currentApprover === "team-lead" && actualPositionName === "Programmer" && actualAdditionalRole === "team lead") {
+            canApprove = true;
+            userApprovalLevel = "team-lead";
+        } else if (leaveData.currentApprover === "manager" && actualPositionName === "Manager") {
             canApprove = true;
             userApprovalLevel = "manager";
         } else if (leaveData.currentApprover === "hr" && actualPositionName === "HR") {
@@ -1322,6 +1339,10 @@ const approveLeaveRequest = async (req, res) => {
         
         if (action === "approve") {
             switch (userApprovalLevel) {
+                case "team-lead":
+                    nextApprover = "hr";
+                    newStatus = "approved_team_lead";
+                    break;
                 case "manager":
                     nextApprover = "hr";
                     newStatus = "approved_manager";
@@ -1356,6 +1377,8 @@ const approveLeaveRequest = async (req, res) => {
         // Helper function to get proper status display names
         function getStatusDisplayName(status) {
             switch (status) {
+                case 'approved_team_lead':
+                    return 'Approved by Team Lead';
                 case 'approved_manager':
                     return 'Approved by Manager';
                 case 'approved_hr':
@@ -1412,6 +1435,50 @@ const approveLeaveRequest = async (req, res) => {
                 console.error(`❌ Failed to send ${action} notification to employee:`, notifError);
             });
 
+            // If approved by team lead, also notify HR
+            if (action === 'approve' && userApprovalLevel === 'team-lead') {
+                
+                // Get approver data for notification
+                const employeesRef = db.collection("employees");
+                const approverQuery = await employeesRef.where("uid", "==", userId).get();
+                
+                let approverName = userId;
+                if (!approverQuery.empty) {
+                    const approverData = approverQuery.docs[0].data();
+                    approverName = `${approverData.firstName} ${approverData.lastName}`;
+                }
+                
+                // Find HR personnel
+                const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
+                
+                if (!hrQuery.empty) {
+                    hrQuery.forEach(hrDoc => {
+                        const hrData = hrDoc.data();
+                        
+                        // Create HR notification
+                        createInAppNotification(
+                            hrData.uid,
+                            'Team Lead Approved Leave Request',
+                            `${approverName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
+                            'leave_approved_by_team_lead',
+                            {
+                                leaveRequestId: leaveId,
+                                employeeId: leaveData.employeeId,
+                                teamLeadId: userId,
+                                teamLeadName: approverName,
+                                leaveType: leaveData.leaveTypeName,
+                                fromDate: leaveData.fromDate || leaveData.date,
+                                toDate: leaveData.toDate || leaveData.date,
+                                comment: comment
+                            }
+                        ).catch(hrNotifError => {
+                            console.error(`❌ Failed to send HR notification:`, hrNotifError);
+                        });
+                    });
+                } else {
+                }
+            }
+            
             // If approved by manager, also notify HR
             if (action === 'approve' && userApprovalLevel === 'manager') {
                 
