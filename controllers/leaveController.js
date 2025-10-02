@@ -522,6 +522,9 @@ const createLeaveRequest = async (req, res) => {
         let initialStatus = "pending";
         let initialStatusName = "Pending";
         
+        // Define positions that go through normal manager approval
+        const requiresManagerApproval = ["Salesman", "Programmer"];
+        
         // Check if requester is a final approver (highest level)
         if (employeeRole === "approver" || employeeRole === "approver-three") {
             // Approver requests leave → Auto-approve (no one above them)
@@ -534,8 +537,12 @@ const createLeaveRequest = async (req, res) => {
         } else if (positionName === "HR") {
             // HR requests leave → Skip both manager and HR, go to final approver
             firstApprover = "approver";
+        } else if (requiresManagerApproval.includes(positionName)) {
+            // Salesman and Programmer → Go through manager approval
+            firstApprover = "manager";
         } else {
-            // Regular employee → Standard workflow starts with manager
+            // Other positions (excluding Programmer and Salesman) → Skip manager, go to HR directly
+            firstApprover = "hr";
         }
 
         // Create leave request data
@@ -1205,11 +1212,11 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 // Check if request is from manager's managed branches
                 const fromManagedBranch = managedBranches.includes(request.branchCode);
                 
-                // Check if request is from Salesman (managers can approve salesman requests)
-                const fromSalesman = request.positionName === "Salesman";
+                // Managers can approve requests from Salesman and Programmer (positions that require manager approval)
+                const requiresManagerApproval = request.positionName === "Salesman" || request.positionName === "Programmer";
                 
-                // Manager can see requests from their managed branches AND from salesmen
-                return fromManagedBranch && fromSalesman;
+                // Manager can see requests from their managed branches AND from positions that require manager approval
+                return fromManagedBranch && requiresManagerApproval;
             });
         }
         
