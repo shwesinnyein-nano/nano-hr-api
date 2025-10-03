@@ -4,18 +4,11 @@ const { v4: uuidv4 } = require('uuid');
 const { admin, db } = require("../config/firebaseConfig");
 
 
-// ✅ OPTIMIZED: Added pagination and limit
-const getEmployeeListInternal = async (limit = 50, page = 1) => {
+// Get all employees (simple query without optimization for now)
+const getEmployeeListInternal = async () => {
     try {
         const employeesRef = db.collection("employees");
-        
-        // Calculate pagination
-        const startAt = (page - 1) * limit;
-        
-        // Query with limit (no ordering to avoid index issues)
-        const snapshot = await employeesRef
-            .limit(limit)
-            .get();
+        const snapshot = await employeesRef.get();
 
         if (snapshot.empty) {
             return {
@@ -85,10 +78,10 @@ const checkEmployee = async (req, res) => {
 
         const employeesRef = db.collection("employees");
         const querySnapshot = await employeesRef.where("authId", "==", authId).get();
-        
+
         if (querySnapshot.empty) {
             return res.json({
-                success: true,
+            success: true,
                 message: "Employee not found",
                 employeeExists: false
             });
@@ -109,8 +102,7 @@ const checkEmployee = async (req, res) => {
 // ✅ OPTIMIZED: Added pagination support
 const getEmployeeList = async (req, res) => {
     try {
-        const { limit = 50, page = 1 } = req.query;
-        const result = await getEmployeeListInternal(parseInt(limit), parseInt(page));
+        const result = await getEmployeeListInternal();
         
         if (result.success) {
             res.json(result);
@@ -600,7 +592,7 @@ const searchEmployees = async (req, res) => {
                 
                 if (!search && sortBy) {
                     query = query.orderBy(sortBy, sortOrder);
-                } else {
+            } else {
                     query = query.orderBy("createdAt", "desc");
                 }
                 
@@ -871,7 +863,7 @@ const checkInOut = async (req, res) => {
             }
 
             return res.json({
-                success: true,
+            success: true,
                 message: "Check-in successful",
                 attendance: {
                     id: attendanceDoc.id,
@@ -883,7 +875,7 @@ const checkInOut = async (req, res) => {
             // Check if checked in first
             if (existingQuery.empty) {
                 return res.status(400).json({
-                    success: false,
+            success: false,
                     message: "No check-in record found for today. Please check in first."
                 });
             }
@@ -893,8 +885,8 @@ const checkInOut = async (req, res) => {
 
             // Check if already checked out
             if (existingData.checkOutAt) {
-                return res.status(400).json({
-                    success: false,
+            return res.status(400).json({
+                success: false,
                     message: "Already checked out today",
                     attendance: existingData
                 });
@@ -922,10 +914,10 @@ const checkInOut = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error in check in/out:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: "Internal server error",
-            error: error.message 
+            error: error.message
         });
     }
 };
@@ -935,7 +927,7 @@ const getAttendanceHistory = async (req, res) => {
     console.log("Get attendance history called");
     try {
         const { employeeId, startDate, endDate, limit = 30 } = req.query;
-        
+
         let query = db.collection("employee-attendance");
 
         // Filter by employee ID if provided
@@ -983,10 +975,10 @@ const getAttendanceHistory = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error getting attendance history:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: "Internal server error",
-            error: error.message 
+            error: error.message
         });
     }
 };
@@ -996,7 +988,7 @@ const getTodayAttendance = async (req, res) => {
     console.log("Get today's attendance called");
     try {
         const { employeeId } = req.params;
-        
+
         if (!employeeId) {
             return res.status(400).json({
                 success: false,
@@ -1005,7 +997,7 @@ const getTodayAttendance = async (req, res) => {
         }
 
         const today = new Date().toISOString().split('T')[0];
-        
+
         const attendanceRef = db.collection("employee-attendance");
         const query = await attendanceRef
             .where("employeeId", "==", employeeId)
@@ -1039,10 +1031,10 @@ const getTodayAttendance = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error getting today's attendance:", error);
-        res.status(500).json({ 
+        res.status(500).json({
             success: false,
             message: "Internal server error",
-            error: error.message 
+            error: error.message
         });
     }
 };
