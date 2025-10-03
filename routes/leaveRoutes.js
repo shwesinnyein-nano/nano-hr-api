@@ -28,6 +28,7 @@ const upload = multer({
 // Leave routes
 router.get("/settings", leaveController.getLeaveSettings);
 router.get("/employee/:uid", leaveController.getEmployeeLeaveList);
+router.get("/balance/:employeeId", leaveController.getEmployeeLeaveBalance); // NEW: Get leave balance
 router.post("/create", upload.array('attachments', 5), leaveController.createLeaveRequest);
 router.get("/all", leaveController.getAllLeaveRequests);
 router.get("/:leaveId", leaveController.getLeaveRequestById);

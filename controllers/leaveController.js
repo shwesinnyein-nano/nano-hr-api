@@ -1605,6 +1605,155 @@ const approveLeaveRequest = async (req, res) => {
     }
 };
 
+// Get employee leave balance (quota vs used)
+const getEmployeeLeaveBalance = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        const { year } = req.query; // Optional: filter by year (default: current year)
+        
+        if (!employeeId) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID is required"
+            });
+        }
+
+        // Get employee data
+        const employeesRef = db.collection("employees");
+        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+        
+        if (employeeQuery.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "Employee not found"
+            });
+        }
+
+        const employeeData = employeeQuery.docs[0].data();
+        const employeeGender = employeeData.gender;
+        
+        // Check eligibility (3+ months with company)
+        const joinDate = new Date(employeeData.joinDate);
+        const today = new Date();
+        const monthsWithCompany = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
+                                  (today.getMonth() - joinDate.getMonth());
+        
+        if (monthsWithCompany < 3) {
+            return res.json({
+                success: true,
+                message: "Employee must be with company for 3+ months to have leave balance",
+                eligible: false,
+                monthsWithCompany: monthsWithCompany,
+                requiredMonths: 3,
+                balances: []
+            });
+        }
+
+        // Determine year to filter (default: current year)
+        const filterYear = year ? parseInt(year) : new Date().getFullYear();
+        const yearStart = `${filterYear}-01-01`;
+        const yearEnd = `${filterYear}-12-31`;
+
+        // Step 1: Get all leave types (quotas) for this employee
+        const leaveSettingsRef = db.collection("leave-settings");
+        const settingsSnapshot = await leaveSettingsRef.get();
+        
+        if (settingsSnapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No leave types configured",
+                eligible: true,
+                balances: []
+            });
+        }
+
+        // Get all leave types with their quotas
+        const leaveTypes = [];
+        settingsSnapshot.forEach(doc => {
+            const setting = doc.data();
+            
+            // Filter by gender if applicable
+            if (!setting.gender || setting.gender === "All" || setting.gender === employeeGender) {
+                leaveTypes.push({
+                    leaveTypeId: doc.id,
+                    leaveTypeName: setting.title || setting.titleEng,
+                    maxDays: setting.leaveDay || 0,
+                    isPaid: setting.isPaid || false,
+                    isActive: setting.isActive !== false
+                });
+            }
+        });
+
+        // Step 2: Get all APPROVED leave requests for this employee in the year
+        const leaveRequestsRef = db.collection("employee-leave");
+        const requestsSnapshot = await leaveRequestsRef
+            .where("employeeId", "==", employeeId)
+            .where("status", "==", "approved")
+            .get();
+
+        // Calculate used days per leave type
+        const usedDaysMap = {};
+        
+        requestsSnapshot.forEach(doc => {
+            const request = doc.data();
+            const leaveTypeId = request.leaveType;
+            const requestDate = request.fromDate || request.date || request.requestDate;
+            
+            // Filter by year if date is available
+            if (requestDate && requestDate.startsWith(filterYear.toString())) {
+                const daysUsed = request.totalDays || 0.5; // Hourly leave = 0.5 days minimum
+                
+                if (!usedDaysMap[leaveTypeId]) {
+                    usedDaysMap[leaveTypeId] = 0;
+                }
+                usedDaysMap[leaveTypeId] += daysUsed;
+            }
+        });
+
+        // Step 3: Calculate balance for each leave type
+        const balances = leaveTypes.map(leaveType => {
+            const used = usedDaysMap[leaveType.leaveTypeId] || 0;
+            const remaining = leaveType.maxDays - used;
+            
+            return {
+                leaveTypeId: leaveType.leaveTypeId,
+                leaveTypeName: leaveType.leaveTypeName,
+                totalAllocated: leaveType.maxDays,
+                used: used,
+                remaining: remaining > 0 ? remaining : 0,
+                isPaid: leaveType.isPaid,
+                isActive: leaveType.isActive,
+                percentageUsed: leaveType.maxDays > 0 ? Math.round((used / leaveType.maxDays) * 100) : 0
+            };
+        });
+
+        res.json({
+            success: true,
+            message: "Leave balance retrieved successfully",
+            employeeId: employeeId,
+            employeeName: `${employeeData.firstName} ${employeeData.lastName}`,
+            year: filterYear,
+            eligible: true,
+            monthsWithCompany: monthsWithCompany,
+            balances: balances,
+            summary: {
+                totalLeaveTypes: balances.length,
+                totalDaysAllocated: balances.reduce((sum, b) => sum + b.totalAllocated, 0),
+                totalDaysUsed: balances.reduce((sum, b) => sum + b.used, 0),
+                totalDaysRemaining: balances.reduce((sum, b) => sum + b.remaining, 0)
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting employee leave balance:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getLeaveSettings,
     getEmployeeLeaveList,
@@ -1613,5 +1762,6 @@ module.exports = {
     updateLeaveRequestStatus,
     getLeaveRequestById,
     getLeaveRequestsByApprovalLevel,
-    approveLeaveRequest
+    approveLeaveRequest,
+    getEmployeeLeaveBalance
 };
