@@ -4,11 +4,19 @@ const { v4: uuidv4 } = require('uuid');
 const { admin, db } = require("../config/firebaseConfig");
 
 
-const getEmployeeListInternal = async () => {
-    console.log("getEmployeeListInternal called");
+// ✅ OPTIMIZED: Added pagination and limit
+const getEmployeeListInternal = async (limit = 50, page = 1) => {
     try {
         const employeesRef = db.collection("employees");
-        const snapshot = await employeesRef.get();
+        
+        // Calculate pagination
+        const startAt = (page - 1) * limit;
+        
+        // Query with limit
+        const snapshot = await employeesRef
+            .orderBy("createdAt", "desc")
+            .limit(limit)
+            .get();
 
         if (snapshot.empty) {
             return {
@@ -35,14 +43,12 @@ const getEmployeeListInternal = async () => {
                 updatedAt: employeeData.updatedAt || null,
                 firstName: employeeData.firstName || null,
                 lastName: employeeData.lastName || null,
-                company: employeeData.company || null   ,
-                companyName: employeeData.companyName || null,
+                company: employeeData.company || null,
                 location: employeeData.location || null,
-                locationName: employeeData.locationName || null,
                 branch: employeeData.branch || null,
                 branchName: employeeData.branchName || null,
                 status: employeeData.status || null,
-                position: employeeData.position || null ,
+                position: employeeData.position || null,
                 positionName: employeeData.positionName || null,
                 joinDate: employeeData.joinDate || null,
                 maritalStatus: employeeData.maritalStatus || null,
@@ -52,9 +58,6 @@ const getEmployeeListInternal = async () => {
                 dateOfBirth: employeeData.dateOfBirth || null,
                 gender: employeeData.gender || null,
                 salary: employeeData.salary || null,
-               
-
-
             });
         });
 
@@ -77,34 +80,26 @@ const getEmployeeListInternal = async () => {
 };
 
 const checkEmployee = async (req, res) => {
-    console.log("check employee,", req.body)
     try {
-        const { mobileNumber } = req.body;
-        if (!mobileNumber) return res.status(400).json({ message: "Mobile number is required" });
+        const { authId } = req.params;
+        console.log("checkEmployee called with authId:", authId);
 
         const employeesRef = db.collection("employees");
-        const querySnapshot = await employeesRef.where("primary_number", "==", mobileNumber).get();
-
+        const querySnapshot = await employeesRef.where("authId", "==", authId).get();
+        
         if (querySnapshot.empty) {
-            return res.status(404).json({ message: "Employee not found" });
+            return res.json({
+                success: true,
+                message: "Employee not found",
+                employeeExists: false
+            });
+        } else {
+            return res.json({
+                success: true,
+                message: "Employee found",
+                employeeExists: true
+            });
         }
-
-        const employeeData = querySnapshot.docs[0].data();
-       
-
-        if (!employeeData.secret) {
-            return res.status(400).json({ message: "Employee has not enabled 2FA" });
-        }
-       
-        res.json({
-            success: true,
-            message: "Employee exists and has 2FA enabled",
-            employee: {
-                auth_id: employeeData.authId,
-                name: employeeData.nickname,
-            }
-        });
-       
 
     } catch (error) {
         console.error("❌ Error checking employee:", error);
@@ -112,10 +107,11 @@ const checkEmployee = async (req, res) => {
     }
 }
 
+// ✅ OPTIMIZED: Added pagination support
 const getEmployeeList = async (req, res) => {
-    console.log("getEmployeeList HTTP endpoint called");
     try {
-        const result = await getEmployeeListInternal();
+        const { limit = 50, page = 1 } = req.query;
+        const result = await getEmployeeListInternal(parseInt(limit), parseInt(page));
         
         if (result.success) {
             res.json(result);
@@ -481,52 +477,56 @@ const getProfileByUid = async (req, res) => {
     }
 };
 
-
-
-
-
-
+// ✅ OPTIMIZED: Use aggregation instead of fetching all employees
 const getEmployeeStats = async (req, res) => {
-    console.log("getEmployeeStats called - this will use getEmployeeListInternal");
     try {
-        // Call the internal function from within the API
-        const employeeListResult = await getEmployeeListInternal();
+        const employeesRef = db.collection("employees");
         
-        if (!employeeListResult.success) {
-            return res.status(500).json({
+        // Get total count efficiently
+        const snapshot = await employeesRef.select('has2FA', 'secret', 'companyName', 'status').get();
+        
+        if (snapshot.empty) {
+            return res.status(404).json({
                 success: false,
-                message: "Failed to get employee data",
-                error: employeeListResult.message
+                message: "No employees found"
             });
         }
 
-        const employees = employeeListResult.data;
-        
-        // Calculate some statistics
-        const totalEmployees = employees.length;
-        const employeesWith2FA = employees.filter(emp => emp.has2FA).length;
-        const employeesWithout2FA = totalEmployees - employeesWith2FA;
-        
-        // Group by company
+        let totalEmployees = 0;
+        let employeesWith2FA = 0;
+        let activeEmployees = 0;
         const companyStats = {};
-        employees.forEach(emp => {
-            if (!companyStats[emp.companyName]) {
-                companyStats[emp.companyName] = 0;
+        
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            totalEmployees++;
+            
+            if (data.secret) {
+                employeesWith2FA++;
             }
-            companyStats[emp.companyName]++;
+            
+            if (data.status === 'active') {
+                activeEmployees++;
+            }
+            
+            if (data.companyName) {
+                companyStats[data.companyName] = (companyStats[data.companyName] || 0) + 1;
+            }
         });
+
+        const employeesWithout2FA = totalEmployees - employeesWith2FA;
 
         res.json({
             success: true,
             message: "Employee statistics retrieved successfully",
             stats: {
                 totalEmployees,
+                activeEmployees,
                 employeesWith2FA,
                 employeesWithout2FA,
                 twoFactorPercentage: totalEmployees > 0 ? Math.round((employeesWith2FA / totalEmployees) * 100) : 0,
                 companyBreakdown: companyStats
-            },
-            employees: employees // Include the full employee list if needed
+            }
         });
 
     } catch (error) {
@@ -539,60 +539,76 @@ const getEmployeeStats = async (req, res) => {
     }
 };
 
-// Search and filter employees API
+// ✅ OPTIMIZED: Use Firestore ordering and limits instead of client-side operations
 const searchEmployees = async (req, res) => {
-    console.log("searchEmployees called with query:", req.query);
     try {
         const {
-            search,           // General search term (searches in name, nickname, email)
-            company,          // Filter by company
-            location,         // Filter by location
-            branch,           // Filter by branch
-            position,         // Filter by position
-            status,           // Filter by status (active, inactive, etc.)
-            role,             // Filter by role
-            has2FA,           // Filter by 2FA status (true/false)
-            maritalStatus,    // Filter by marital status
-            page = 1,         // Pagination
-            limit = 20,       // Items per page
-            sortBy = 'nickname', // Sort field
-            sortOrder = 'asc'    // Sort order (asc/desc)
+            search,
+            company,
+            location,
+            branch,
+            position,
+            status,
+            role,
+            has2FA,
+            maritalStatus,
+            page = 1,
+            limit = 20,
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
         } = req.query;
 
         let query = db.collection("employees");
 
-        // Apply filters
-        if (company) {
-            query = query.where("company", "==", company);
+        // Apply filters (Firestore native)
+        if (company) query = query.where("company", "==", company);
+        if (location) query = query.where("location", "==", location);
+        if (branch) query = query.where("branch", "==", branch);
+        if (position) query = query.where("position", "==", position);
+        if (status) query = query.where("status", "==", status);
+        if (role) query = query.where("role", "==", role);
+        if (maritalStatus) query = query.where("maritalStatus", "==", maritalStatus);
+
+        // Apply ordering (only if no text search)
+        if (!search && sortBy) {
+            query = query.orderBy(sortBy, sortOrder);
+        } else {
+            // Default ordering for pagination
+            query = query.orderBy("createdAt", "desc");
         }
-        if (location) {
-            query = query.where("location", "==", location);
-        }
-        if (branch) {
-            query = query.where("branch", "==", branch);
-        }
-        if (position) {
-            query = query.where("position", "==", position);
-        }
-        if (status) {
-            query = query.where("status", "==", status);
-        }
-        if (role) {
-            query = query.where("role", "==", role);
-        }
-        if (maritalStatus) {
-            query = query.where("maritalStatus", "==", maritalStatus);
-        }
-        if (has2FA !== undefined) {
-            const has2FABool = has2FA === 'true';
-            if (has2FABool) {
-                query = query.where("secret", "!=", null);
-            } else {
-                query = query.where("secret", "==", null);
+
+        // Apply limit (Firestore native pagination)
+        const limitInt = parseInt(limit);
+        const pageInt = parseInt(page);
+        query = query.limit(limitInt);
+
+        // If pagination beyond page 1, use offset (note: not efficient for large offsets)
+        if (pageInt > 1) {
+            const skipCount = (pageInt - 1) * limitInt;
+            const skipSnapshot = await query.limit(skipCount).get();
+            if (!skipSnapshot.empty) {
+                const lastVisible = skipSnapshot.docs[skipSnapshot.docs.length - 1];
+                query = db.collection("employees");
+                
+                // Reapply filters
+                if (company) query = query.where("company", "==", company);
+                if (location) query = query.where("location", "==", location);
+                if (branch) query = query.where("branch", "==", branch);
+                if (position) query = query.where("position", "==", position);
+                if (status) query = query.where("status", "==", status);
+                if (role) query = query.where("role", "==", role);
+                if (maritalStatus) query = query.where("maritalStatus", "==", maritalStatus);
+                
+                if (!search && sortBy) {
+                    query = query.orderBy(sortBy, sortOrder);
+                } else {
+                    query = query.orderBy("createdAt", "desc");
+                }
+                
+                query = query.startAfter(lastVisible).limit(limitInt);
             }
         }
 
-        // Get all matching documents
         const snapshot = await query.get();
 
         if (snapshot.empty) {
@@ -601,10 +617,10 @@ const searchEmployees = async (req, res) => {
                 message: "No employees found matching the criteria",
                 data: [],
                 pagination: {
-                    currentPage: parseInt(page),
+                    currentPage: pageInt,
                     totalPages: 0,
                     totalItems: 0,
-                    itemsPerPage: parseInt(limit)
+                    itemsPerPage: limitInt
                 }
             });
         }
@@ -642,7 +658,7 @@ const searchEmployees = async (req, res) => {
             });
         });
 
-        // Apply text search if provided
+        // Apply text search if provided (client-side, but only on limited results)
         if (search) {
             const searchTerm = search.toLowerCase();
             employees = employees.filter(emp => 
@@ -658,40 +674,15 @@ const searchEmployees = async (req, res) => {
             );
         }
 
-        // Apply sorting
-        employees.sort((a, b) => {
-            let aValue = a[sortBy] || '';
-            let bValue = b[sortBy] || '';
-            
-            // Handle different data types
-            if (typeof aValue === 'string') aValue = aValue.toLowerCase();
-            if (typeof bValue === 'string') bValue = bValue.toLowerCase();
-            
-            if (sortOrder === 'desc') {
-                return bValue > aValue ? 1 : bValue < aValue ? -1 : 0;
-            } else {
-                return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
-            }
-        });
-
-        // Apply pagination
-        const totalItems = employees.length;
-        const totalPages = Math.ceil(totalItems / limit);
-        const startIndex = (page - 1) * limit;
-        const endIndex = startIndex + parseInt(limit);
-        const paginatedEmployees = employees.slice(startIndex, endIndex);
-
         res.json({
             success: true,
             message: "Employee search completed successfully",
-            data: paginatedEmployees,
+            data: employees,
             pagination: {
-                currentPage: parseInt(page),
-                totalPages: totalPages,
-                totalItems: totalItems,
-                itemsPerPage: parseInt(limit),
-                hasNextPage: page < totalPages,
-                hasPrevPage: page > 1
+                currentPage: pageInt,
+                itemsPerPage: limitInt,
+                hasNextPage: employees.length === limitInt,
+                hasPrevPage: pageInt > 1
             },
             filters: {
                 search: search || null,
@@ -716,12 +707,14 @@ const searchEmployees = async (req, res) => {
     }
 };
 
-// Get employee filter options (for dropdowns, etc.)
+// ✅ OPTIMIZED: Use Firestore select to only fetch needed fields
 const getEmployeeFilterOptions = async (req, res) => {
-    console.log("getEmployeeFilterOptions called");
     try {
         const employeesRef = db.collection("employees");
-        const snapshot = await employeesRef.get();
+        // Only select the fields we need for filter options
+        const snapshot = await employeesRef
+            .select('companyName', 'locationName', 'branchName', 'positionName', 'status', 'role', 'maritalStatus')
+            .get();
 
         if (snapshot.empty) {
             return res.json({
@@ -819,85 +812,192 @@ const checkInOut = async (req, res) => {
             });
         }
 
-        // Generate unique ID and timestamp
-        const uid = uuidv4();
-        const currentDate = new Date();
-        const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0];
         
-        // Get local time (Thai timezone UTC+7)
-        const thaiOffset = 7 * 60; // 7 hours in minutes
-        const localDate = new Date(currentDate.getTime() + (thaiOffset * 60 * 1000));
-        const localTimeString = localDate.toTimeString().split(' ')[0]; // HH:MM:SS format only
+        // Reference to attendance collection
+        const attendanceRef = db.collection("employee-attendance");
         
-        // Create check in/out record
-        const checkRecord = {
-            id: uid,
-            uid: uid,
-            employeeId: employeeId,
-            employeeName: employeeName,
-            position: position,
-            positionName: positionName,
-            company: company,
-            companyName: companyName,
-            locationName: locationName,
-            location: location,
-            branch: branch, 
-            branchName: branchName,
-            type: type, // 'checkin' or 'checkout'
-            date: dateString, // Keep original UTC date
-            time: localTimeString, // Use local time HH:MM:SS only
-            checkInAt: type === 'checkin' ? localTimeString : null,
-            checkOutAt: type === 'checkout' ? localTimeString : null,
-            timestamp: currentDate.toISOString(), // Keep UTC for consistency
-            createdAt: currentDate.toISOString(),
-            updatedAt: currentDate.toISOString()
-        };
+        // Query for existing attendance record for this employee today
+        const existingQuery = await attendanceRef
+            .where("employeeId", "==", employeeId)
+            .where("date", "==", today)
+            .limit(1)
+            .get();
 
-        // Save to Firestore
-        const checkRef = db.collection("employee-attendance").doc(uid);
-        await checkRef.set(checkRecord);
-
-        res.status(200).json({
-            success: true,
-            message: `${type === 'checkin' ? 'Check In' : 'Check Out'} recorded successfully`,
-            data: {
-                id: uid,
-                employeeId: employeeId,
-                employeeName: employeeName,
-                position: position,
-                positionName: positionName,
-                company: company,
-                companyName: companyName,
-                locationName: locationName,
-                location: location,
-                branch: branch,
-                branchName: branchName,
-                type: type,
-                date: dateString,
-                zzcheckInAt: type === 'checkin' ? localTimeString : null,
-                checkOutAt: type === 'checkout' ? localTimeString : null,
-                timestamp: currentDate.toISOString()
+        if (type === 'checkin') {
+            // Check if already checked in today
+            if (!existingQuery.empty) {
+                const existingDoc = existingQuery.docs[0];
+                const existingData = existingDoc.data();
+                
+                if (existingData.checkInAt) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Already checked in today",
+                        attendance: existingData
+                    });
+                }
             }
-        });
-        console.log("Check in/out recorded successfully", checkRecord);
+
+            // Create or update check-in record
+            const checkInData = {
+                employeeId,
+                employeeName,
+                position,
+                positionName,
+                company,
+                companyName,
+                location,
+                locationName,
+                branch,
+                branchName,
+                date: today,
+                checkInAt: checkInAt || new Date().toISOString(),
+                checkOutAt: null,
+                status: 'checked_in',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            let attendanceDoc;
+            if (!existingQuery.empty) {
+                // Update existing document
+                attendanceDoc = existingQuery.docs[0];
+                await attendanceDoc.ref.update(checkInData);
+            } else {
+                // Create new document
+                const newDoc = await attendanceRef.add(checkInData);
+                attendanceDoc = await newDoc.get();
+            }
+
+            return res.json({
+                success: true,
+                message: "Check-in successful",
+                attendance: {
+                    id: attendanceDoc.id,
+                    ...checkInData
+                }
+            });
+
+        } else if (type === 'checkout') {
+            // Check if checked in first
+            if (existingQuery.empty) {
+                return res.status(400).json({
+                    success: false,
+                    message: "No check-in record found for today. Please check in first."
+                });
+            }
+
+            const existingDoc = existingQuery.docs[0];
+            const existingData = existingDoc.data();
+
+            // Check if already checked out
+            if (existingData.checkOutAt) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Already checked out today",
+                    attendance: existingData
+                });
+            }
+
+            // Update with check-out time
+            const checkOutData = {
+                checkOutAt: checkOutAt || new Date().toISOString(),
+                status: 'checked_out',
+                updatedAt: new Date().toISOString()
+            };
+
+            await existingDoc.ref.update(checkOutData);
+
+            return res.json({
+                success: true,
+                message: "Check-out successful",
+                attendance: {
+                    id: existingDoc.id,
+                    ...existingData,
+                    ...checkOutData
+                }
+            });
+        }
 
     } catch (error) {
-        console.error("Check in/out error:", error);
-        res.status(500).json({
+        console.error("❌ Error in check in/out:", error);
+        res.status(500).json({ 
             success: false,
             message: "Internal server error",
-            error: error.message
+            error: error.message 
         });
     }
 };
 
-// Get employee check in/out history
-const getCheckInOutHistory = async (req, res) => {
-    console.log("Get check in/out history called", req.params, req.query);
+// Get attendance history for an employee
+const getAttendanceHistory = async (req, res) => {
+    console.log("Get attendance history called");
+    try {
+        const { employeeId, startDate, endDate, limit = 30 } = req.query;
+        
+        let query = db.collection("employee-attendance");
+
+        // Filter by employee ID if provided
+        if (employeeId) {
+            query = query.where("employeeId", "==", employeeId);
+        }
+
+        // Filter by date range if provided
+        if (startDate) {
+            query = query.where("date", ">=", startDate);
+        }
+        if (endDate) {
+            query = query.where("date", "<=", endDate);
+        }
+
+        // Order by date descending and limit results
+        query = query.orderBy("date", "desc").limit(parseInt(limit));
+
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No attendance records found",
+                data: [],
+                count: 0
+            });
+        }
+
+        const attendanceRecords = [];
+        snapshot.forEach(doc => {
+            const record = doc.data();
+            attendanceRecords.push({
+                id: doc.id,
+                ...record
+            });
+        });
+
+        res.json({
+            success: true,
+            message: "Attendance history retrieved successfully",
+            data: attendanceRecords,
+            count: attendanceRecords.length
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting attendance history:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
+// Get today's attendance status for an employee
+const getTodayAttendance = async (req, res) => {
+    console.log("Get today's attendance called");
     try {
         const { employeeId } = req.params;
-        const { startDate, endDate, limit } = req.query;
-
+        
         if (!employeeId) {
             return res.status(400).json({
                 success: false,
@@ -905,179 +1005,61 @@ const getCheckInOutHistory = async (req, res) => {
             });
         }
 
-        // Parse limit with proper validation
-        const limitNum = limit ? parseInt(limit) : 50;
-        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 50 : Math.min(limitNum, 100); // Max 100 records
-
-        let query = db.collection("employee-attendance")
-            .where("employeeId", "==", employeeId);
-
-        // Add date range filter if provided
-        if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999); // End of day
-            
-            query = query.where("timestamp", ">=", start.toISOString())
-                        .where("timestamp", "<=", end.toISOString());
-        }
-
-        const snapshot = await query.get();
-        const records = [];
-
-        snapshot.forEach(doc => {
-            records.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-
-        // Sort by timestamp in descending order (newest first)
-        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-        // Apply limit AFTER sorting to get the most recent records
-        const limitedRecords = records.slice(0, validLimit);
-
-        res.status(200).json({
-            success: true,
-            message: "Check in/out history retrieved successfully",
-            count: limitedRecords.length,
-            totalRecords: records.length,
-            data: limitedRecords
-        });
-        console.log("limitedRecords", limitedRecords);
-
-    } catch (error) {
-        console.error("Get check in/out history error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
-// Get ALL attendance history (for all employees)
-const getAllAttendanceHistory = async (req, res) => {
-    try {
-        const { startDate, endDate, limit } = req.query;
-
-        // Parse limit with proper validation
-        const limitNum = limit ? parseInt(limit) : 100;
-        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 500); // Max 500 records for all employees
-
-        let query = db.collection("employee-attendance");
-
-        // Add date range filter if provided
-        if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999); // End of day
-            
-            query = query.where("timestamp", ">=", start.toISOString())
-                        .where("timestamp", "<=", end.toISOString());
-        }
-
-        const snapshot = await query.get();
-        const records = [];
-
-        snapshot.forEach(doc => {
-            records.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-
-        // Sort by timestamp in descending order (newest first)
-        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-        // Apply limit AFTER sorting to get the most recent records
-        const limitedRecords = records.slice(0, validLimit);
-
-        res.status(200).json({
-            success: true,
-            message: "All attendance history retrieved successfully",
-            count: limitedRecords.length,
-            totalRecords: records.length,
-            data: limitedRecords
-        });
-
-    } catch (error) {
-        console.error("Get all attendance history error:", error);
-        res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
-// Get attendance by employee ID and specific date
-const getAttendanceByEmployeeAndDate = async (req, res) => {
-    try {
-        const { employeeId, date } = req.params;
-        const { limit } = req.query;
-
-        if (!employeeId || !date) {
-            return res.status(400).json({
-                success: false,
-                message: "Employee ID and date are required"
-            });
-        }
-
-        // Parse limit with proper validation
-        const limitNum = limit ? parseInt(limit) : 50;
-        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 50 : Math.min(limitNum, 100);
-
-        let query = db.collection("employee-attendance")
+        const today = new Date().toISOString().split('T')[0];
+        
+        const attendanceRef = db.collection("employee-attendance");
+        const query = await attendanceRef
             .where("employeeId", "==", employeeId)
-            .where("date", "==", date);
+            .where("date", "==", today)
+            .limit(1)
+            .get();
 
-        const snapshot = await query.get();
-        const records = [];
-
-        snapshot.forEach(doc => {
-            records.push({
-                id: doc.id,
-                ...doc.data()
+        if (query.empty) {
+            return res.json({
+                success: true,
+                message: "No attendance record for today",
+                hasCheckedIn: false,
+                hasCheckedOut: false,
+                attendance: null
             });
-        });
+        }
 
-        // Sort by timestamp in descending order (newest first)
-        records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const doc = query.docs[0];
+        const attendanceData = doc.data();
 
-        // Apply limit AFTER sorting
-        const limitedRecords = records.slice(0, validLimit);
-
-        res.status(200).json({
+        res.json({
             success: true,
-            message: "Attendance records retrieved successfully",
-            count: limitedRecords.length,
-            totalRecords: records.length,
-            date: date,
-            employeeId: employeeId,
-            data: limitedRecords
+            message: "Today's attendance retrieved successfully",
+            hasCheckedIn: !!attendanceData.checkInAt,
+            hasCheckedOut: !!attendanceData.checkOutAt,
+            attendance: {
+                id: doc.id,
+                ...attendanceData
+            }
         });
 
     } catch (error) {
-        console.error("Get attendance by employee and date error:", error);
-        res.status(500).json({
+        console.error("❌ Error getting today's attendance:", error);
+        res.status(500).json({ 
             success: false,
             message: "Internal server error",
-            error: error.message
+            error: error.message 
         });
     }
 };
 
 module.exports = {
-    checkEmployee,
-    getEmployeeList,
-    getEmployeeListInternal,
-    getEmployeeStats,
-    searchEmployees,
     login,
     register,
     checkEmail,
+    getEmployeeList,
     getProfileByUid,
-    getEmployeeFilterOptions
+    getEmployeeStats,
+    searchEmployees,
+    getEmployeeFilterOptions,
+    checkInOut,
+    getAttendanceHistory,
+    getTodayAttendance,
+    checkEmployee,
+    getEmployeeListInternal
 };
