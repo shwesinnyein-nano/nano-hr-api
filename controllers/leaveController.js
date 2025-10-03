@@ -537,8 +537,8 @@ const createLeaveRequest = async (req, res) => {
         } else if (positionName === "Programmer") {
             // Programmer → Go to Team Lead first
             firstApprover = "team-lead";
-        } else if(positionName === "Programmer" && additionalRole === "team lead") {
-            // Programmer with additionalRole = "team lead" → Go to Team Lead first
+        } else if(positionName === "Programmer" && additionalRole === "team leade") {
+            // Programmer with additionalRole = "team leader" → Go to HR directly
             firstApprover = "hr";
             
         }
@@ -667,10 +667,10 @@ const createLeaveRequest = async (req, res) => {
                     approverIds = uniqueManagers.map(manager => manager.uid);
                     
                 } else if (firstApprover === "team-lead") {
-                    // Find Team Lead (Programmer with additionalRole = "team lead")
+                    // Find Team Lead (Programmer with additionalRole = "team leader")
                     const teamLeadQuery = await employeesRef
                         .where("positionName", "==", "Programmer")
-                        .where("additionalRole", "==", "team lead")
+                        .where("additionalRole", "==", "team leader")
                         .get();
                     
                     teamLeadQuery.forEach(doc => {
@@ -1318,7 +1318,7 @@ const approveLeaveRequest = async (req, res) => {
         let canApprove = false;
         let userApprovalLevel = null;
         
-        if (leaveData.currentApprover === "team-lead" && actualPositionName === "Programmer" && actualAdditionalRole === "team lead") {
+        if (leaveData.currentApprover === "team-lead" && actualPositionName === "Programmer" && actualAdditionalRole === "team leader") {
             canApprove = true;
             userApprovalLevel = "team-lead";
         } else if (leaveData.currentApprover === "manager" && actualPositionName === "Manager") {
