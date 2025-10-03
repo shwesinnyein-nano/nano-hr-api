@@ -618,12 +618,12 @@ const createLeaveRequest = async (req, res) => {
         // Send notification to appropriate approver based on routing (async, don't wait for it)
         // Skip notification if auto-approved (firstApprover is null)
         if (firstApprover !== null) {
-            try {
+        try {
                 let approverIds = [];
-                
-                // Get employee data to find their manager
-                const employeesRef = db.collection("employees");
-                const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+            
+            // Get employee data to find their manager
+            const employeesRef = db.collection("employees");
+            const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
             
             if (!employeeQuery.empty) {
                 const employeeData = employeeQuery.docs[0].data();
@@ -632,47 +632,47 @@ const createLeaveRequest = async (req, res) => {
                 // Route notification based on firstApprover
                 if (firstApprover === "manager") {
                     // Find managers for this branch
-                    
-                    const managersWithManagedBranchesQuery = await employeesRef
-                        .where("positionName", "==", "Manager")
-                        .get();
-                    
-                    const managersWithManagedBranches = [];
-                    managersWithManagedBranchesQuery.forEach(doc => {
-                        const managerData = doc.data();
-                        if (managerData.managedBranches && Array.isArray(managerData.managedBranches)) {
-                            if (managerData.managedBranches.includes(branchCode)) {
-                                managersWithManagedBranches.push({
-                                    id: doc.id,
-                                    uid: managerData.uid,
-                                    firstName: managerData.firstName,
+                
+                const managersWithManagedBranchesQuery = await employeesRef
+                    .where("positionName", "==", "Manager")
+                    .get();
+                
+                const managersWithManagedBranches = [];
+                managersWithManagedBranchesQuery.forEach(doc => {
+                    const managerData = doc.data();
+                    if (managerData.managedBranches && Array.isArray(managerData.managedBranches)) {
+                        if (managerData.managedBranches.includes(branchCode)) {
+                            managersWithManagedBranches.push({
+                                id: doc.id,
+                                uid: managerData.uid,
+                                firstName: managerData.firstName,
                                     lastName: managerData.lastName
-                                });
-                            }
+                            });
                         }
-                    });
-                    
+                    }
+                });
+                
                     // Fallback - find manager in same branch
-                    const sameBranchManagerQuery = await employeesRef
-                        .where("branch", "==", branchCode)
-                        .where("positionName", "==", "Manager")
-                        .limit(1)
-                        .get();
+                const sameBranchManagerQuery = await employeesRef
+                    .where("branch", "==", branchCode)
+                    .where("positionName", "==", "Manager")
+                    .limit(1)
+                    .get();
                     
-                    const sameBranchManagers = [];
-                    sameBranchManagerQuery.forEach(doc => {
-                        const managerData = doc.data();
-                        sameBranchManagers.push({
-                            id: doc.id,
+                const sameBranchManagers = [];
+                sameBranchManagerQuery.forEach(doc => {
+                    const managerData = doc.data();
+                    sameBranchManagers.push({
+                        id: doc.id,
                             uid: managerData.uid
-                        });
                     });
-                    
-                    const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
-                    const uniqueManagers = allManagers.filter((manager, index, self) => 
-                        index === self.findIndex(m => m.id === manager.id)
-                    );
-                    
+                });
+                
+                const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
+                const uniqueManagers = allManagers.filter((manager, index, self) => 
+                    index === self.findIndex(m => m.id === manager.id)
+                );
+                
                     approverIds = uniqueManagers.map(manager => manager.uid);
                     
                 } else if (firstApprover === "team-lead") {
@@ -735,8 +735,8 @@ const createLeaveRequest = async (req, res) => {
                 }
             } else {
             }
-            } catch (notifError) {
-                console.error("❌ Error sending notification:", notifError);
+        } catch (notifError) {
+            console.error("❌ Error sending notification:", notifError);
             }
         } else {
         }
@@ -1491,7 +1491,7 @@ const approveLeaveRequest = async (req, res) => {
                 } else {
                 }
             }
-            
+
             // If approved by manager, also notify HR
             if (action === 'approve' && userApprovalLevel === 'manager') {
                 
@@ -1754,6 +1754,184 @@ const getEmployeeLeaveBalance = async (req, res) => {
     }
 };
 
+// Get comprehensive leave list with role-based filtering
+const getLeaveListByRole = async (req, res) => {
+    try {
+        const { userId, status, startDate, endDate, limit = 100, page = 1 } = req.query;
+        
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: "User ID is required"
+            });
+        }
+
+        // Step 1: Get user data to determine their role and position
+        const employeesRef = db.collection("employees");
+        const userQuery = await employeesRef.where("uid", "==", userId).get();
+        
+        if (userQuery.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const userData = userQuery.docs[0].data();
+        const userPosition = userData.positionName;
+        const userRole = userData.role;
+        const managedBranches = userData.managedBranches || [];
+        const userBranch = userData.branch;
+
+        // Step 2: Build query based on role/position
+        let query = db.collection("employee-leave");
+        let canSeeAllBranches = false;
+        let canSeeAllEmployees = false;
+
+        // Determine permissions
+        if (userPosition === "HR" || userRole === "approver" || userRole === "approver-three") {
+            // HR and Approvers see everything
+            canSeeAllBranches = true;
+            canSeeAllEmployees = true;
+        } else if (userPosition === "Programmer (Team Lead)") {
+            // Team Lead sees only Programmer data (all branches)
+            query = query.where("positionName", "==", "Programmer");
+            canSeeAllBranches = true;
+            canSeeAllEmployees = false;
+        } else if (userPosition === "Manager") {
+            // Manager sees only their managed branches
+            const branches = managedBranches.length > 0 ? managedBranches : [userBranch];
+            
+            if (branches.length > 0) {
+                // Firestore 'in' query supports up to 10 values
+                const branchBatch = branches.slice(0, 10);
+                query = query.where("branchCode", "in", branchBatch);
+            }
+            canSeeAllBranches = false;
+            canSeeAllEmployees = false;
+        } else {
+            // Regular employees see only their own data
+            query = query.where("employeeId", "==", userId);
+        }
+
+        // Step 3: Apply optional filters
+        if (status) {
+            // Support multiple statuses: "pending,approved,rejected"
+            const statusList = status.split(',').map(s => s.trim());
+            if (statusList.length === 1) {
+                query = query.where("status", "==", statusList[0]);
+            } else if (statusList.length > 1 && statusList.length <= 10) {
+                query = query.where("status", "in", statusList);
+            }
+        }
+
+        if (startDate) {
+            query = query.where("requestDate", ">=", startDate);
+        }
+        
+        if (endDate) {
+            query = query.where("requestDate", "<=", endDate);
+        }
+
+        // Step 4: Execute query
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No leave requests found",
+                data: [],
+                count: 0,
+                permissions: {
+                    canSeeAllBranches,
+                    canSeeAllEmployees,
+                    userPosition,
+                    userRole
+                }
+            });
+        }
+
+        // Step 5: Format results
+        const leaveRequests = [];
+        snapshot.forEach(doc => {
+            const leaveData = doc.data();
+            leaveRequests.push({
+                id: doc.id,
+                uid: leaveData.uid || doc.id,
+                employeeId: leaveData.employeeId,
+                employeeName: leaveData.employeeName,
+                firstName: leaveData.firstName,
+                lastName: leaveData.lastName,
+                positionName: leaveData.positionName,
+                company: leaveData.company,
+                companyName: leaveData.companyName,
+                location: leaveData.location,
+                locationName: leaveData.locationName,
+                branch: leaveData.branch,
+                branchName: leaveData.branchName,
+                branchCode: leaveData.branchCode,
+                leaveType: leaveData.leaveType,
+                leaveTypeName: leaveData.leaveTypeName,
+                requestType: leaveData.requestType,
+                fromDate: leaveData.fromDate,
+                toDate: leaveData.toDate,
+                date: leaveData.date,
+                totalDays: leaveData.totalDays,
+                reason: leaveData.reason,
+                status: leaveData.status,
+                statusName: leaveData.statusName,
+                currentApprover: leaveData.currentApprover,
+                approvalLevel: leaveData.approvalLevel,
+                approvalHistory: leaveData.approvalHistory || [],
+                requestDate: leaveData.requestDate,
+                createdAt: leaveData.createdAt,
+                updatedAt: leaveData.updatedAt,
+                attachment: leaveData.attachment
+            });
+        });
+
+        // Sort by created date (newest first)
+        leaveRequests.sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0);
+            const dateB = new Date(b.createdAt || 0);
+            return dateB - dateA;
+        });
+
+        // Apply pagination
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedResults = leaveRequests.slice(startIndex, endIndex);
+
+        res.json({
+            success: true,
+            message: "Leave requests retrieved successfully",
+            data: paginatedResults,
+            count: paginatedResults.length,
+            total: leaveRequests.length,
+            permissions: {
+                canSeeAllBranches,
+                canSeeAllEmployees,
+                userPosition,
+                userRole,
+                managedBranches: userPosition === "Manager" ? managedBranches : null
+            },
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(leaveRequests.length / limit),
+                itemsPerPage: parseInt(limit)
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting leave list by role:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Internal server error",
+            error: error.message 
+        });
+    }
+};
+
 module.exports = {
     getLeaveSettings,
     getEmployeeLeaveList,
@@ -1763,5 +1941,6 @@ module.exports = {
     getLeaveRequestById,
     getLeaveRequestsByApprovalLevel,
     approveLeaveRequest,
-    getEmployeeLeaveBalance
+    getEmployeeLeaveBalance,
+    getLeaveListByRole
 };
