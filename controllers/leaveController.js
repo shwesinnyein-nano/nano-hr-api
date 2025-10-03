@@ -522,31 +522,43 @@ const createLeaveRequest = async (req, res) => {
         let initialStatus = "pending";
         let initialStatusName = "Pending";
         
+        console.log(`🔍 Leave routing for positionName: "${positionName}", role: "${employeeRole}"`);
+        
         // Check if requester is a final approver (highest level)
         if (employeeRole === "approver" || employeeRole === "approver-three") {
             // Approver requests leave → Auto-approve (no one above them)
             firstApprover = null;
             initialStatus = "approved";
             initialStatusName = "Approved";
+            console.log(`✅ Auto-approved (Approver role)`);
         } else if (positionName === "Manager") {
             // Manager requests leave → Skip manager level, go to HR
             firstApprover = "hr";
+            console.log(`✅ Manager → HR`);
         } else if (positionName === "HR") {
             // HR requests leave → Skip both manager and HR, go to final approver
             firstApprover = "approver";
+            console.log(`✅ HR → Approver`);
         } else if (positionName === "Programmer (Team Lead)") {
             // Team Lead requests leave → Skip team-lead level, go to HR directly
             firstApprover = "hr";
+            console.log(`✅ Team Lead → HR`);
         } else if (positionName === "Programmer") {
             // Programmer → Go to Team Lead first
             firstApprover = "team-lead";
+            console.log(`✅ Programmer → Team Lead`);
         } else if (positionName === "Salesman") {
             // Salesman → Go through manager approval
             firstApprover = "manager";
+            console.log(`✅ Salesman → Manager`);
         } else {
             // Other positions → Skip manager, go to HR directly
             firstApprover = "hr";
+            console.log(`✅ Other position (${positionName}) → HR`);
         }
+        
+        console.log(`📤 firstApprover set to: "${firstApprover}"`);
+
 
         // Create leave request data
         const currentDateTime = new Date().toISOString();
