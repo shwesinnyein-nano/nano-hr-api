@@ -12,9 +12,8 @@ const getEmployeeListInternal = async (limit = 50, page = 1) => {
         // Calculate pagination
         const startAt = (page - 1) * limit;
         
-        // Query with limit
+        // Query with limit (no ordering to avoid index issues)
         const snapshot = await employeesRef
-            .orderBy("createdAt", "desc")
             .limit(limit)
             .get();
 
