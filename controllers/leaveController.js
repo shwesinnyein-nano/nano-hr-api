@@ -537,7 +537,7 @@ const createLeaveRequest = async (req, res) => {
         } else if (positionName === "Programmer") {
             // Programmer → Go to Team Lead first
             firstApprover = "team-lead";
-        } else if(positionName === "Programmer" && additionalRole === "team leade") {
+        } else if(positionName === "Programmer" && additionalRole === "team leader") {
             // Programmer with additionalRole = "team leader" → Go to HR directly
             firstApprover = "hr";
             
