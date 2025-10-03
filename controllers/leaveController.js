@@ -1932,6 +1932,189 @@ const getLeaveListByRole = async (req, res) => {
     }
 };
 
+// Get leave history with role-specific status filtering
+const getLeaveHistory = async (req, res) => {
+    try {
+        const { userId, startDate, endDate, limit = 100, page = 1 } = req.query;
+        
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: "User ID is required"
+            });
+        }
+
+        // Step 1: Get user data to determine their role and position
+        const employeesRef = db.collection("employees");
+        const userQuery = await employeesRef.where("uid", "==", userId).get();
+        
+        if (userQuery.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const userData = userQuery.docs[0].data();
+        const userPosition = userData.positionName;
+        const userRole = userData.role;
+        const managedBranches = userData.managedBranches || [];
+        const userBranch = userData.branch;
+
+        // Step 2: Build query based on role/position
+        let query = db.collection("employee-leave");
+        let allowedStatuses = [];
+        let filterDescription = "";
+
+        // Determine permissions and status filters
+        if (userPosition === "HR") {
+            // HR sees: approved_hr, rejected_hr, approved, rejected (all processed by HR or completed)
+            allowedStatuses = ["approved_hr", "rejected_hr", "approved", "rejected"];
+            filterDescription = "HR - Processed leaves (approved_hr, rejected_hr, approved, rejected)";
+            // No branch filter - sees ALL branches
+            
+        } else if (userRole === "approver" || userRole === "approver-three") {
+            // Approver sees: approved_hr, rejected, approved (things to approve or completed)
+            allowedStatuses = ["approved_hr", "rejected", "approved"];
+            filterDescription = "Approver - Leaves for final approval (approved_hr, rejected, approved)";
+            // No branch filter - sees ALL branches
+            
+        } else if (userPosition === "Programmer (Team Lead)") {
+            // Team Lead sees only Programmer data (all statuses, all branches)
+            query = query.where("positionName", "==", "Programmer");
+            filterDescription = "Team Lead - All Programmer leaves";
+            
+        } else if (userPosition === "Manager") {
+            // Manager sees only their managed branches (all statuses)
+            const branches = managedBranches.length > 0 ? managedBranches : [userBranch];
+            
+            if (branches.length > 0) {
+                // Firestore 'in' query supports up to 10 values
+                const branchBatch = branches.slice(0, 10);
+                query = query.where("branchCode", "in", branchBatch);
+                filterDescription = `Manager - Branches: ${branches.join(', ')}`;
+            }
+            
+        } else {
+            // Regular employees see only their own data
+            query = query.where("employeeId", "==", userId);
+            filterDescription = "Employee - Own leaves only";
+        }
+
+        // Apply status filter for HR and Approver
+        if (allowedStatuses.length > 0) {
+            query = query.where("status", "in", allowedStatuses);
+        }
+
+        // Apply date filters if provided
+        if (startDate) {
+            query = query.where("requestDate", ">=", startDate);
+        }
+        
+        if (endDate) {
+            query = query.where("requestDate", "<=", endDate);
+        }
+
+        // Step 3: Execute query
+        const snapshot = await query.get();
+
+        if (snapshot.empty) {
+            return res.json({
+                success: true,
+                message: "No leave requests found",
+                data: [],
+                count: 0,
+                filter: {
+                    description: filterDescription,
+                    userPosition,
+                    userRole,
+                    allowedStatuses: allowedStatuses.length > 0 ? allowedStatuses : "all",
+                    managedBranches: userPosition === "Manager" ? managedBranches : null
+                }
+            });
+        }
+
+        // Step 4: Format results
+        const leaveRequests = [];
+        snapshot.forEach(doc => {
+            const leaveData = doc.data();
+            leaveRequests.push({
+                id: doc.id,
+                uid: leaveData.uid || doc.id,
+                employeeId: leaveData.employeeId,
+                employeeName: leaveData.employeeName,
+                firstName: leaveData.firstName,
+                lastName: leaveData.lastName,
+                positionName: leaveData.positionName,
+                company: leaveData.company,
+                companyName: leaveData.companyName,
+                location: leaveData.location,
+                locationName: leaveData.locationName,
+                branch: leaveData.branch,
+                branchName: leaveData.branchName,
+                branchCode: leaveData.branchCode,
+                leaveType: leaveData.leaveType,
+                leaveTypeName: leaveData.leaveTypeName,
+                requestType: leaveData.requestType,
+                fromDate: leaveData.fromDate,
+                toDate: leaveData.toDate,
+                date: leaveData.date,
+                totalDays: leaveData.totalDays,
+                reason: leaveData.reason,
+                status: leaveData.status,
+                statusName: leaveData.statusName,
+                currentApprover: leaveData.currentApprover,
+                approvalLevel: leaveData.approvalLevel,
+                approvalHistory: leaveData.approvalHistory || [],
+                requestDate: leaveData.requestDate,
+                createdAt: leaveData.createdAt,
+                updatedAt: leaveData.updatedAt,
+                attachment: leaveData.attachment
+            });
+        });
+
+        // Sort by created date (newest first)
+        leaveRequests.sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0);
+            const dateB = new Date(b.createdAt || 0);
+            return dateB - dateA;
+        });
+
+        // Apply pagination
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + parseInt(limit);
+        const paginatedResults = leaveRequests.slice(startIndex, endIndex);
+
+        res.json({
+            success: true,
+            message: "Leave history retrieved successfully",
+            data: paginatedResults,
+            count: paginatedResults.length,
+            total: leaveRequests.length,
+            filter: {
+                description: filterDescription,
+                userPosition,
+                userRole,
+                allowedStatuses: allowedStatuses.length > 0 ? allowedStatuses : "all",
+                managedBranches: userPosition === "Manager" ? managedBranches : null
+            },
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages: Math.ceil(leaveRequests.length / limit),
+                itemsPerPage: parseInt(limit)
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error getting leave history:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getLeaveSettings,
     getEmployeeLeaveList,
@@ -1942,5 +2125,6 @@ module.exports = {
     getLeaveRequestsByApprovalLevel,
     approveLeaveRequest,
     getEmployeeLeaveBalance,
-    getLeaveListByRole
+    getLeaveListByRole,
+    getLeaveHistory
 };
