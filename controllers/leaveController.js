@@ -534,16 +534,13 @@ const createLeaveRequest = async (req, res) => {
         } else if (positionName === "HR") {
             // HR requests leave → Skip both manager and HR, go to final approver
             firstApprover = "approver";
+        } else if (positionName === "Programmer (Team Lead)") {
+            // Team Lead requests leave → Skip team-lead level, go to HR directly
+            firstApprover = "hr";
         } else if (positionName === "Programmer") {
             // Programmer → Go to Team Lead first
             firstApprover = "team-lead";
-        } else if(positionName === "Programmer" && additionalRole === "team leader") {
-            // Programmer with additionalRole = "team leader" → Go to HR directly
-            firstApprover = "hr";
-            
-        }
-        
-        else if (positionName === "Salesman") {
+        } else if (positionName === "Salesman") {
             // Salesman → Go through manager approval
             firstApprover = "manager";
         } else {
@@ -667,10 +664,9 @@ const createLeaveRequest = async (req, res) => {
                     approverIds = uniqueManagers.map(manager => manager.uid);
                     
                 } else if (firstApprover === "team-lead") {
-                    // Find Team Lead (Programmer with additionalRole = "team leader")
+                    // Find Team Lead by positionName
                     const teamLeadQuery = await employeesRef
-                        .where("positionName", "==", "Programmer")
-                        .where("additionalRole", "==", "team leader")
+                        .where("positionName", "==", "Programmer (Team Lead)")
                         .get();
                     
                     teamLeadQuery.forEach(doc => {
@@ -1309,16 +1305,15 @@ const approveLeaveRequest = async (req, res) => {
         const userData = userQuery.docs[0].data();
         const actualUserRole = userData.role; // For approvers
         const actualPositionName = userData.positionName; // For manager, HR, and team lead
-        const actualAdditionalRole = userData.additionalRole; // For team lead
         
         
         // Check permission based on approval level
-        // Team Lead, Manager, HR: Check positionName (and additionalRole for team lead)
+        // Team Lead, Manager, HR: Check positionName
         // Approver: Check role
         let canApprove = false;
         let userApprovalLevel = null;
         
-        if (leaveData.currentApprover === "team-lead" && actualPositionName === "Programmer" && actualAdditionalRole === "team leader") {
+        if (leaveData.currentApprover === "team-lead" && actualPositionName === "Programmer (Team Lead)") {
             canApprove = true;
             userApprovalLevel = "team-lead";
         } else if (leaveData.currentApprover === "manager" && actualPositionName === "Manager") {
