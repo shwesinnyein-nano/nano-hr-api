@@ -1968,16 +1968,16 @@ const getLeaveHistory = async (req, res) => {
 
         // Determine permissions and status filters
         if (userPosition === "HR") {
-            // HR sees: approved_hr, rejected_hr, approved, rejected (all processed by HR or completed)
-            allowedStatuses = ["approved_hr", "rejected_hr", "approved", "rejected"];
-            filterDescription = "HR - Processed leaves (approved_hr, rejected_hr, approved, rejected)";
+            // HR sees: ALL employees, ALL branches, ALL statuses
+            filterDescription = "HR - All employees, all branches, all statuses";
             // No branch filter - sees ALL branches
+            // No status filter - sees ALL statuses
             
         } else if (userRole === "approver" || userRole === "approver-three") {
-            // Approver sees: approved_hr, rejected, approved (things to approve or completed)
-            allowedStatuses = ["approved_hr", "rejected", "approved"];
-            filterDescription = "Approver - Leaves for final approval (approved_hr, rejected, approved)";
+            // Approver sees: ALL employees, ALL branches, ALL statuses
+            filterDescription = "Approver - All employees, all branches, all statuses";
             // No branch filter - sees ALL branches
+            // No status filter - sees ALL statuses
             
         } else if (userPosition === "Programmer (Team Lead)") {
             // Team Lead sees only Programmer data (all statuses, all branches)
@@ -2107,10 +2107,10 @@ const getLeaveHistory = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error getting leave history:", error);
-        res.status(500).json({
+        res.status(500).json({ 
             success: false,
             message: "Internal server error",
-            error: error.message
+            error: error.message 
         });
     }
 };
