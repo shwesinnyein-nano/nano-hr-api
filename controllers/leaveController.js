@@ -2034,43 +2034,59 @@ const getLeaveHistory = async (req, res) => {
             });
         }
 
-        // Step 4: Format results
+        // Step 4: Format results and filter by action taken
         const leaveRequests = [];
         snapshot.forEach(doc => {
             const leaveData = doc.data();
-            leaveRequests.push({
-                id: doc.id,
-                uid: leaveData.uid || doc.id,
-                employeeId: leaveData.employeeId,
-                employeeName: leaveData.employeeName,
-                firstName: leaveData.firstName,
-                lastName: leaveData.lastName,
-                positionName: leaveData.positionName,
-                company: leaveData.company,
-                companyName: leaveData.companyName,
-                location: leaveData.location,
-                locationName: leaveData.locationName,
-                branch: leaveData.branch,
-                branchName: leaveData.branchName,
-                branchCode: leaveData.branchCode,
-                leaveType: leaveData.leaveType,
-                leaveTypeName: leaveData.leaveTypeName,
-                requestType: leaveData.requestType,
-                fromDate: leaveData.fromDate,
-                toDate: leaveData.toDate,
-                date: leaveData.date,
-                totalDays: leaveData.totalDays,
-                reason: leaveData.reason,
-                status: leaveData.status,
-                statusName: leaveData.statusName,
-                currentApprover: leaveData.currentApprover,
-                approvalLevel: leaveData.approvalLevel,
-                approvalHistory: leaveData.approvalHistory || [],
-                requestDate: leaveData.requestDate,
-                createdAt: leaveData.createdAt,
-                updatedAt: leaveData.updatedAt,
-                attachment: leaveData.attachment
-            });
+            const approvalHistory = leaveData.approvalHistory || [];
+            
+            // Check if current user has taken action on this leave
+            const userHasActed = approvalHistory.some(history => 
+                history.userId === userId && (history.action === "approve" || history.action === "reject")
+            );
+            
+            // For Team Lead, Manager, HR, Approver: only show if they've taken action
+            // For regular employees: show their own leaves regardless
+            const shouldInclude = 
+                leaveData.employeeId === userId || // Own leaves
+                userHasActed; // Or has taken action on this leave
+            
+            if (shouldInclude) {
+                leaveRequests.push({
+                    id: doc.id,
+                    uid: leaveData.uid || doc.id,
+                    employeeId: leaveData.employeeId,
+                    employeeName: leaveData.employeeName,
+                    firstName: leaveData.firstName,
+                    lastName: leaveData.lastName,
+                    positionName: leaveData.positionName,
+                    company: leaveData.company,
+                    companyName: leaveData.companyName,
+                    location: leaveData.location,
+                    locationName: leaveData.locationName,
+                    branch: leaveData.branch,
+                    branchName: leaveData.branchName,
+                    branchCode: leaveData.branchCode,
+                    leaveType: leaveData.leaveType,
+                    leaveTypeName: leaveData.leaveTypeName,
+                    requestType: leaveData.requestType,
+                    fromDate: leaveData.fromDate,
+                    toDate: leaveData.toDate,
+                    date: leaveData.date,
+                    totalDays: leaveData.totalDays,
+                    reason: leaveData.reason,
+                    status: leaveData.status,
+                    statusName: leaveData.statusName,
+                    currentApprover: leaveData.currentApprover,
+                    approvalLevel: leaveData.approvalLevel,
+                    approvalHistory: approvalHistory,
+                    requestDate: leaveData.requestDate,
+                    createdAt: leaveData.createdAt,
+                    updatedAt: leaveData.updatedAt,
+                    attachment: leaveData.attachment,
+                    userAction: userHasActed ? approvalHistory.find(h => h.userId === userId)?.action : null
+                });
+            }
         });
 
         // Sort by created date (newest first)
