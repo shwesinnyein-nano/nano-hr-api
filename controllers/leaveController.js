@@ -128,8 +128,14 @@ const getLeaveSettings = async (req, res) => {
                 const joinDate = new Date(employeeData.joinDate);
                 const today = new Date();
                 
+                // Calculate months difference, accounting for day of month
                 monthsWithCompany = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
                                   (today.getMonth() - joinDate.getMonth());
+                
+                // If current day is before join day, subtract 1 month (not a full month yet)
+                if (today.getDate() < joinDate.getDate()) {
+                    monthsWithCompany -= 1;
+                }
                 
                 employeeEligible = monthsWithCompany >= 3;
                 employeeGender = employeeData.gender;
@@ -267,10 +273,14 @@ const getEmployeeLeaveList = async (req, res) => {
         const joinDate = new Date(employeeData.joinDate);
         const today = new Date();
         
-        // Calculate months difference
-        const monthsDiff = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
+        // Calculate months difference, accounting for day of month
+        let monthsDiff = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
                           (today.getMonth() - joinDate.getMonth());
         
+        // If current day is before join day, subtract 1 month (not a full month yet)
+        if (today.getDate() < joinDate.getDate()) {
+            monthsDiff -= 1;
+        }
 
         // Check if employee has been with company for 3+ months
         if (monthsDiff < 3) {
@@ -1635,8 +1645,13 @@ const getEmployeeLeaveBalance = async (req, res) => {
         // Check eligibility (3+ months with company)
         const joinDate = new Date(employeeData.joinDate);
         const today = new Date();
-        const monthsWithCompany = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
+        let monthsWithCompany = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
                                   (today.getMonth() - joinDate.getMonth());
+        
+        // If current day is before join day, subtract 1 month (not a full month yet)
+        if (today.getDate() < joinDate.getDate()) {
+            monthsWithCompany -= 1;
+        }
         
         if (monthsWithCompany < 3) {
             return res.json({
