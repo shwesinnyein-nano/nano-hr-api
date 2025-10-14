@@ -14,6 +14,7 @@ router.get("/list", employeeController.getEmployeeList);
 router.get("/stats", employeeController.getEmployeeStats);
 router.get("/search", employeeController.searchEmployees);
 router.get("/filter-options", employeeController.getEmployeeFilterOptions);
+router.get("/:employeeId/shift-data", employeeController.getEmployeeWithShiftData);
 
 // Attendance routes moved to /attendance
 

@@ -1039,6 +1039,102 @@ const getTodayAttendance = async (req, res) => {
     }
 };
 
+// Get employee data joined with shift-data based on positionName
+const getEmployeeWithShiftData = async (req, res) => {
+    console.log("Get employee with shift data called");
+    try {
+        const { employeeId } = req.params;
+
+        if (!employeeId) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID is required"
+            });
+        }
+
+        // Get employee data
+        const employeeRef = db.collection("employees");
+        const employeeQuery = await employeeRef.where("uid", "==", employeeId).get();
+
+        if (employeeQuery.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "Employee not found"
+            });
+        }
+
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeData = employeeDoc.data();
+
+        if (!employeeData.positionName) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee position name not found"
+            });
+        }
+
+        // Get shift data based on positionName
+        const shiftDataRef = db.collection("shift-data");
+        const shiftDataQuery = await shiftDataRef.where("positionName", "==", employeeData.positionName).get();
+
+        let shiftData = null;
+        if (!shiftDataQuery.empty) {
+            const shiftDoc = shiftDataQuery.docs[0];
+            shiftData = {
+                id: shiftDoc.id,
+                ...shiftDoc.data()
+            };
+        }
+
+        // Prepare response with joined data
+        const response = {
+            success: true,
+            message: "Employee data with shift information retrieved successfully",
+            employee: {
+                id: employeeDoc.id,
+                uid: employeeData.uid,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                company: employeeData.company,
+                companyName: employeeData.companyName,
+                location: employeeData.location,
+                locationName: employeeData.locationName,
+                branch: employeeData.branch,
+                branchName: employeeData.branchName,
+                position: employeeData.position,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt
+            },
+            shiftData: shiftData
+        };
+
+        res.json(response);
+
+    } catch (error) {
+        console.error("❌ Error getting employee with shift data:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     login,
     register,
@@ -1052,5 +1148,6 @@ module.exports = {
     getAttendanceHistory,
     getTodayAttendance,
     checkEmployee,
-    getEmployeeListInternal
+    getEmployeeListInternal,
+    getEmployeeWithShiftData
 };
