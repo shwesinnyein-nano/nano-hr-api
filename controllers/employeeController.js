@@ -1141,6 +1141,9 @@ const getShiftDataWithFilter = async (req, res) => {
     console.log("Get shift data with filter called", req.query);
     try {
         const { date, position, employeeId } = req.query;
+        
+        // Trim any whitespace from date parameter
+        const trimmedDate = date ? date.trim() : null;
 
         if (!employeeId) {
             return res.status(400).json({
@@ -1171,9 +1174,11 @@ const getShiftDataWithFilter = async (req, res) => {
             // Filter by employeeId in shift-data
             shiftQuery = shiftQuery.where("employeeId", "==", employeeId);
             
-            if (date) {
+            if (trimmedDate) {
                 // For Salesman/Manager, filter by assignDate (exact date match)
-                shiftQuery = shiftQuery.where("assignDate", "==", date);
+                // Also try with trailing space to handle database format
+                const dateWithSpace = trimmedDate + " ";
+                shiftQuery = shiftQuery.where("assignDate", "in", [trimmedDate, dateWithSpace]);
             }
         }
         // For other positions: filter by positionName and workingDays
@@ -1184,8 +1189,8 @@ const getShiftDataWithFilter = async (req, res) => {
             }
             
             // Filter by date (day of week) if provided
-            if (date) {
-                const dayOfWeek = getDayOfWeek(date);
+            if (trimmedDate) {
+                const dayOfWeek = getDayOfWeek(trimmedDate);
                 if (dayOfWeek) {
                     shiftQuery = shiftQuery.where("workingDays", "array-contains", dayOfWeek);
                 }
@@ -1219,7 +1224,7 @@ const getShiftDataWithFilter = async (req, res) => {
                 branchName: employeeData.branchName
             },
             filters: {
-                date: date || null,
+                date: trimmedDate || null,
                 position: position || null,
                 employeeId: employeeId
             },
