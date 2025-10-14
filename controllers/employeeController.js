@@ -1073,23 +1073,24 @@ const getEmployeeWithShiftData = async (req, res) => {
             });
         }
 
-        // Get shift data based on positionName
+        // Get all shift data based on positionName
         const shiftDataRef = db.collection("shift-data");
         const shiftDataQuery = await shiftDataRef.where("positionName", "==", employeeData.positionName).get();
 
-        let shiftData = null;
+        let shiftData = [];
         if (!shiftDataQuery.empty) {
-            const shiftDoc = shiftDataQuery.docs[0];
-            shiftData = {
-                id: shiftDoc.id,
-                ...shiftDoc.data()
-            };
+            shiftDataQuery.forEach(doc => {
+                shiftData.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
         }
 
         // Prepare response with joined data
         const response = {
             success: true,
-            message: "Employee data with shift information retrieved successfully",
+            message: `Employee data with ${shiftData.length} shift record(s) retrieved successfully`,
             employee: {
                 id: employeeDoc.id,
                 uid: employeeData.uid,
