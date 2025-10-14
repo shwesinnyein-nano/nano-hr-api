@@ -1181,12 +1181,10 @@ const getShiftDataWithFilter = async (req, res) => {
                 shiftQuery = shiftQuery.where("assignDate", "in", [trimmedDate, dateWithSpace]);
             }
         }
-        // For other positions: filter by positionName and workingDays
+        // For other positions: filter by employee's positionName and workingDays
         else {
-            // Filter by positionName if provided
-            if (position) {
-                shiftQuery = shiftQuery.where("positionName", "==", position);
-            }
+            // Always filter by the employee's actual positionName
+            shiftQuery = shiftQuery.where("positionName", "==", employeeData.positionName);
             
             // Filter by date (day of week) if provided
             if (trimmedDate) {
