@@ -1136,6 +1136,116 @@ const getEmployeeWithShiftData = async (req, res) => {
     }
 };
 
+// Get shift data with flexible filtering (date, position, employeeId)
+const getShiftDataWithFilter = async (req, res) => {
+    console.log("Get shift data with filter called", req.query);
+    try {
+        const { date, position, employeeId } = req.query;
+
+        if (!employeeId) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID is required"
+            });
+        }
+
+        // Get employee data first
+        const employeeRef = db.collection("employees");
+        const employeeQuery = await employeeRef.where("uid", "==", employeeId).get();
+
+        if (employeeQuery.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "Employee not found"
+            });
+        }
+
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeData = employeeDoc.data();
+
+        // Build shift data query based on filtering requirements
+        let shiftQuery = db.collection("shift-data");
+
+        // For Salesman and Manager: filter by employeeId and assignDate
+        if (employeeData.positionName === "Salesman" || employeeData.positionName === "Manager") {
+            // Filter by employeeId in shift-data
+            shiftQuery = shiftQuery.where("employeeId", "==", employeeId);
+            
+            if (date) {
+                // For Salesman/Manager, filter by assignDate (exact date match)
+                shiftQuery = shiftQuery.where("assignDate", "==", date);
+            }
+        }
+        // For other positions: filter by positionName and workingDays
+        else {
+            // Filter by positionName if provided
+            if (position) {
+                shiftQuery = shiftQuery.where("positionName", "==", position);
+            }
+            
+            // Filter by date (day of week) if provided
+            if (date) {
+                const dayOfWeek = getDayOfWeek(date);
+                if (dayOfWeek) {
+                    shiftQuery = shiftQuery.where("workingDays", "array-contains", dayOfWeek);
+                }
+            }
+        }
+
+        const shiftSnapshot = await shiftQuery.get();
+
+        let shiftData = [];
+        if (!shiftSnapshot.empty) {
+            shiftSnapshot.forEach(doc => {
+                shiftData.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+        }
+
+        // Prepare response
+        const response = {
+            success: true,
+            message: `Shift data retrieved successfully for ${employeeData.positionName}`,
+            employee: {
+                id: employeeDoc.id,
+                uid: employeeData.uid,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                positionName: employeeData.positionName,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName
+            },
+            filters: {
+                date: date || null,
+                position: position || null,
+                employeeId: employeeId
+            },
+            shiftData: shiftData,
+            count: shiftData.length
+        };
+
+        res.json(response);
+
+    } catch (error) {
+        console.error("❌ Error getting shift data with filter:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
+// Helper function to convert date to day of week
+function getDayOfWeek(dateString) {
+    const date = new Date(dateString);
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    return days[date.getDay()];
+}
+
 module.exports = {
     login,
     register,
@@ -1150,5 +1260,6 @@ module.exports = {
     getTodayAttendance,
     checkEmployee,
     getEmployeeListInternal,
-    getEmployeeWithShiftData
+    getEmployeeWithShiftData,
+    getShiftDataWithFilter
 };
