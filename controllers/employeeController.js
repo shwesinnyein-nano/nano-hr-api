@@ -1152,51 +1152,63 @@ const getShiftDataWithFilter = async (req, res) => {
             });
         }
 
-        // Get employee data first
-        const employeeRef = db.collection("employees");
-        const employeeQuery = await employeeRef.where("uid", "==", employeeId).get();
+        // Run all queries in parallel for better performance
+        const [employeeSnapshot, shiftSnapshot, attendanceSnapshot] = await Promise.all([
+            // Query 1: Get employee data
+            db.collection("employees").where("uid", "==", employeeId).get(),
+            
+            // Query 2: Get shift data (will be refined after getting employee data)
+            (async () => {
+                const employeeRef = db.collection("employees");
+                const employeeQuery = await employeeRef.where("uid", "==", employeeId).get();
+                
+                if (employeeQuery.empty) return { empty: true, docs: [] };
+                
+                const employeeData = employeeQuery.docs[0].data();
+                let shiftQuery = db.collection("shift-data");
 
-        if (employeeQuery.empty) {
+                // For Salesman and Manager: filter by employeeId and assignDate
+                if (employeeData.positionName === "Salesman" || employeeData.positionName === "Manager") {
+                    shiftQuery = shiftQuery.where("employeeId", "==", employeeId);
+                    
+                    if (trimmedDate) {
+                        const dateWithSpace = trimmedDate + " ";
+                        shiftQuery = shiftQuery.where("assignDate", "in", [trimmedDate, dateWithSpace]);
+                    }
+                }
+                // For other positions: filter by employee's positionName and workingDays
+                else {
+                    shiftQuery = shiftQuery.where("positionName", "==", employeeData.positionName);
+                    
+                    if (trimmedDate) {
+                        const dayOfWeek = getDayOfWeek(trimmedDate);
+                        if (dayOfWeek) {
+                            shiftQuery = shiftQuery.where("workingDays", "array-contains", dayOfWeek);
+                        }
+                    }
+                }
+                
+                return await shiftQuery.get();
+            })(),
+            
+            // Query 3: Get attendance data (only if date provided)
+            trimmedDate ? db.collection("employee-attendance")
+                .where("employeeId", "==", employeeId)
+                .where("date", "==", trimmedDate).get() : Promise.resolve({ empty: true, docs: [] })
+        ]);
+
+        // Check if employee exists
+        if (employeeSnapshot.empty) {
             return res.status(404).json({
                 success: false,
                 message: "Employee not found"
             });
         }
 
-        const employeeDoc = employeeQuery.docs[0];
+        const employeeDoc = employeeSnapshot.docs[0];
         const employeeData = employeeDoc.data();
 
-        // Build shift data query based on filtering requirements
-        let shiftQuery = db.collection("shift-data");
-
-        // For Salesman and Manager: filter by employeeId and assignDate
-        if (employeeData.positionName === "Salesman" || employeeData.positionName === "Manager") {
-            // Filter by employeeId in shift-data
-            shiftQuery = shiftQuery.where("employeeId", "==", employeeId);
-            
-            if (trimmedDate) {
-                // For Salesman/Manager, filter by assignDate (exact date match)
-                // Also try with trailing space to handle database format
-                const dateWithSpace = trimmedDate + " ";
-                shiftQuery = shiftQuery.where("assignDate", "in", [trimmedDate, dateWithSpace]);
-            }
-        }
-        // For other positions: filter by employee's positionName and workingDays
-        else {
-            // Always filter by the employee's actual positionName
-            shiftQuery = shiftQuery.where("positionName", "==", employeeData.positionName);
-            
-            // Filter by date (day of week) if provided
-            if (trimmedDate) {
-                const dayOfWeek = getDayOfWeek(trimmedDate);
-                if (dayOfWeek) {
-                    shiftQuery = shiftQuery.where("workingDays", "array-contains", dayOfWeek);
-                }
-            }
-        }
-
-        const shiftSnapshot = await shiftQuery.get();
-
+        // Process shift data
         let shiftData = [];
         if (!shiftSnapshot.empty) {
             shiftSnapshot.forEach(doc => {
@@ -1207,23 +1219,15 @@ const getShiftDataWithFilter = async (req, res) => {
             });
         }
 
-        // Also get attendance data for the employee and date
+        // Process attendance data
         let attendanceData = [];
-        if (trimmedDate) {
-            const attendanceQuery = db.collection("employee-attendance")
-                .where("employeeId", "==", employeeId)
-                .where("date", "==", trimmedDate);
-
-            const attendanceSnapshot = await attendanceQuery.get();
-            
-            if (!attendanceSnapshot.empty) {
-                attendanceSnapshot.forEach(doc => {
-                    attendanceData.push({
-                        id: doc.id,
-                        ...doc.data()
-                    });
+        if (!attendanceSnapshot.empty) {
+            attendanceSnapshot.forEach(doc => {
+                attendanceData.push({
+                    id: doc.id,
+                    ...doc.data()
                 });
-            }
+            });
         }
 
         // Prepare response
@@ -1235,10 +1239,12 @@ const getShiftDataWithFilter = async (req, res) => {
                 uid: employeeData.uid,
                 firstName: employeeData.firstName,
                 lastName: employeeData.lastName,
+                nickname: employeeData.nickname,
                 positionName: employeeData.positionName,
                 companyName: employeeData.companyName,
                 locationName: employeeData.locationName,
-                branchName: employeeData.branchName
+                branchName: employeeData.branchName,
+
             },
             filters: {
                 date: trimmedDate || null,
