@@ -1207,10 +1207,29 @@ const getShiftDataWithFilter = async (req, res) => {
             });
         }
 
+        // Also get attendance data for the employee and date
+        let attendanceData = [];
+        if (trimmedDate) {
+            const attendanceQuery = db.collection("employee-attendance")
+                .where("employeeId", "==", employeeId)
+                .where("date", "==", trimmedDate);
+
+            const attendanceSnapshot = await attendanceQuery.get();
+            
+            if (!attendanceSnapshot.empty) {
+                attendanceSnapshot.forEach(doc => {
+                    attendanceData.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+            }
+        }
+
         // Prepare response
         const response = {
             success: true,
-            message: `Shift data retrieved successfully for ${employeeData.positionName}`,
+            message: `Shift and attendance data retrieved successfully for ${employeeData.positionName}`,
             employee: {
                 id: employeeDoc.id,
                 uid: employeeData.uid,
@@ -1227,7 +1246,11 @@ const getShiftDataWithFilter = async (req, res) => {
                 employeeId: employeeId
             },
             shiftData: shiftData,
-            count: shiftData.length
+            attendanceData: attendanceData,
+            counts: {
+                shifts: shiftData.length,
+                attendance: attendanceData.length
+            }
         };
 
         res.json(response);
