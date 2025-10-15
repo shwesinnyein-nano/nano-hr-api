@@ -1244,6 +1244,16 @@ const getShiftDataWithFilter = async (req, res) => {
                 companyName: employeeData.companyName,
                 locationName: employeeData.locationName,
                 branchName: employeeData.branchName,
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt
 
             },
             filters: {
