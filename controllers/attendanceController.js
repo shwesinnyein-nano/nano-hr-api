@@ -78,11 +78,9 @@ const checkInOut = async (req, res) => {
                 }
             }
 
-            // Calculate working hours status (simplified)
-            let workingHoursStatus = {
-                status: 'unknown',
-                lateMinutes: 0
-            };
+            // Calculate working hours status
+            let status = 'unknown';
+            let lateMinutes = 0;
 
             try {
                 // Get shift data for this employee and date
@@ -101,35 +99,35 @@ const checkInOut = async (req, res) => {
                     const checkInTime = localTimeString; // e.g., "09:30"
                     const checkInMinutes = timeToMinutes(checkInTime);
                     const startMinutes = timeToMinutes(startTime);
-                    const lateMinutes = checkInMinutes - startMinutes;
+                    const lateMinutesCalc = checkInMinutes - startMinutes;
                     
-                    if (lateMinutes === 0) {
+                    if (lateMinutesCalc === 0) {
                         // Check in time == Start time
-                        workingHoursStatus.status = 'on_time';
-                        workingHoursStatus.lateMinutes = 0;
-                    } else if (lateMinutes >= 1 && lateMinutes <= 15) {
+                        status = 'on_time';
+                        lateMinutes = 0;
+                    } else if (lateMinutesCalc >= 1 && lateMinutesCalc <= 15) {
                         // Check in time is 1-15 minutes after start time
-                        workingHoursStatus.status = 'in_time';
-                        workingHoursStatus.lateMinutes = lateMinutes;
-                    } else if (lateMinutes >= 16) {
+                        status = 'in_time';
+                        lateMinutes = lateMinutesCalc;
+                    } else if (lateMinutesCalc >= 16) {
                         // Check in time is 16+ minutes after start time
-                        workingHoursStatus.status = 'late';
-                        workingHoursStatus.lateMinutes = lateMinutes;
+                        status = 'late';
+                        lateMinutes = lateMinutesCalc;
                     } else {
                         // Check in before start time (early)
-                        workingHoursStatus.status = 'early';
-                        workingHoursStatus.lateMinutes = 0;
+                        status = 'early';
+                        lateMinutes = 0;
                     }
                 } else {
                     // No shift data found - set default status
-                    workingHoursStatus.status = 'no_shift_data';
-                    workingHoursStatus.lateMinutes = 0;
+                    status = 'no_shift_data';
+                    lateMinutes = 0;
                 }
             } catch (shiftError) {
                 console.log("Could not fetch shift data:", shiftError.message);
                 // Set default status when shift data cannot be fetched
-                workingHoursStatus.status = 'no_shift_data';
-                workingHoursStatus.lateMinutes = 0;
+                status = 'no_shift_data';
+                lateMinutes = 0;
             }
 
             // Create new check-in record
@@ -150,7 +148,8 @@ const checkInOut = async (req, res) => {
                 timestamp: thaiTime.toISOString(),
                 createdAt: thaiTime.toISOString(),
                 updatedAt: thaiTime.toISOString(),
-                workingHours: workingHoursStatus
+                status: status,
+                lateMinutes: lateMinutes
             };
 
             // Save to Firestore
@@ -172,7 +171,8 @@ const checkInOut = async (req, res) => {
                     checkInAt: localTimeString,
                     checkOutAt: null,
                     timestamp: currentDate.toISOString(),
-                    workingHours: workingHoursStatus
+                    status: status,
+                    lateMinutes: lateMinutes
                 }
             });
 
