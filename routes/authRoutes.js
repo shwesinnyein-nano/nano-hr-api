@@ -7,6 +7,7 @@ router.post("/verify-otp", authController.verifyOTP);
 router.post("/generate-secret", authController.generateSecret);
 router.post("/login", authController.loginWithIdToken_OLD); // OLD LOGIN - BACKUP
 router.post("/login-email-password", authController.loginWithEmailPassword); // NEW LOGIN
+router.post("/mobile-login", authController.mobileLogin); // NEW: Mobile login with JWT token
 router.post("/login-user", authController.loginUser); // NEW LOGIN ENDPOINT
 router.post("/register-user", authController.registerUser); // NEW REGISTER ENDPOINT
 router.post("/check-email", authController.checkEmail); // CHECK EMAIL EXISTS

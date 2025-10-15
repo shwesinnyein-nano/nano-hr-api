@@ -1,8 +1,6 @@
-
-
-
 const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
+const jwt = require("jsonwebtoken");
 const { admin, db } = require("../config/firebaseConfig");
 
 exports.sendOTP = async (req, res) => {
@@ -683,3 +681,95 @@ exports.verifyToken = async (req, res) => {
     }
 };
 
+// Mobile login with JWT token generation
+exports.mobileLogin = async (req, res) => {
+    console.log("Mobile login called");
+    try {
+        const { email, password } = req.body;
+        
+        // Validation
+        if (!email || !password) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email and password are required" 
+            });
+        }
+
+        // Check if employee exists with this email
+        const employeesRef = db.collection("employees");
+        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        
+        if (querySnapshot.empty) {
+            return res.status(404).json({ 
+                success: false,
+                message: "You need to register first" 
+            });
+        }
+
+        // Employee exists - LOGIN FLOW
+        const employeeDoc = querySnapshot.docs[0];
+        const employeeData = employeeDoc.data();
+
+        // Check if employee has a password set
+        if (!employeeData.password) {
+            return res.status(400).json({ 
+                success: false,
+                message: "You need to register first" 
+            });
+        }
+
+        // Verify password
+        if (employeeData.password !== password) {
+            return res.status(401).json({ 
+                success: false,
+                message: "Invalid password" 
+            });
+        }
+
+        // Password matches - generate JWT token
+        console.log(`✅ Mobile login successful for: ${employeeData.firstName} ${employeeData.lastName}`);
+        
+        const jwtSecret = 'nano-hr-mobile-secret-key-2024';
+        const jwtPayload = {
+            employeeId: employeeDoc.id,
+            email: employeeData.email,
+            role: employeeData.role,
+            firstName: employeeData.firstName,
+            lastName: employeeData.lastName,
+            companyName: employeeData.companyName,
+            positionName: employeeData.positionName
+        };
+        
+        const jwtToken = jwt.sign(jwtPayload, jwtSecret, { expiresIn: '24h' });
+
+        res.json({
+            success: true,
+            message: "Mobile login successful",
+            token: jwtToken, // JWT token for mobile app
+            employee: {
+                id: employeeDoc.id,
+                authId: employeeData.authId,
+                nickname: employeeData.nickname,
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                email: employeeData.email,
+                primaryNumber: employeeData.primary_number,
+                companyName: employeeData.companyName,
+                locationName: employeeData.locationName,
+                branchName: employeeData.branchName,
+                positionName: employeeData.positionName,
+                status: employeeData.status,
+                role: employeeData.role,
+                profileImage: employeeData.profileImage
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ Error in mobile login:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Mobile login failed", 
+            error: error.message 
+        });
+    }
+};
