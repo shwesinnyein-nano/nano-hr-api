@@ -2,6 +2,7 @@ const express = require("express");
 const qrcode = require("qrcode");
 const speakeasy = require("speakeasy");
 const employeeController = require("../controllers/employeeController");
+const { authenticateToken } = require("../middleware/authMiddleware");
  
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.get("/stats", employeeController.getEmployeeStats);
 router.get("/search", employeeController.searchEmployees);
 router.get("/filter-options", employeeController.getEmployeeFilterOptions);
 router.get("/:employeeId/shift-data", employeeController.getEmployeeWithShiftData);
-router.get("/shift-data/filter", employeeController.getShiftDataWithFilter);
+router.get("/shift-data/filter", authenticateToken, employeeController.getShiftDataWithFilter);
 
 // Attendance routes moved to /attendance
 
