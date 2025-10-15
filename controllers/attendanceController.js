@@ -78,13 +78,10 @@ const checkInOut = async (req, res) => {
                 }
             }
 
-            // Get employee's shift data for working hours validation
+            // Calculate working hours status (simplified)
             let workingHoursStatus = {
                 status: 'unknown',
-                lateMinutes: 0,
-                startTime: null,
-                endTime: null,
-                gracePeriod: 15 // 1-15 minutes = In Time, 16+ minutes = Late
+                lateMinutes: 0
             };
 
             try {
@@ -99,10 +96,6 @@ const checkInOut = async (req, res) => {
                 if (!shiftSnapshot.empty) {
                     const shiftData = shiftSnapshot.docs[0].data();
                     const startTime = shiftData.startTime; // e.g., "09:00"
-                    const endTime = shiftData.endTime;     // e.g., "19:00"
-                    
-                    workingHoursStatus.startTime = startTime;
-                    workingHoursStatus.endTime = endTime;
                     
                     // Calculate working hours status
                     const checkInTime = localTimeString; // e.g., "09:30"
@@ -127,10 +120,16 @@ const checkInOut = async (req, res) => {
                         workingHoursStatus.status = 'early';
                         workingHoursStatus.lateMinutes = 0;
                     }
+                } else {
+                    // No shift data found - set default status
+                    workingHoursStatus.status = 'no_shift_data';
+                    workingHoursStatus.lateMinutes = 0;
                 }
             } catch (shiftError) {
                 console.log("Could not fetch shift data:", shiftError.message);
-                // Continue without shift validation
+                // Set default status when shift data cannot be fetched
+                workingHoursStatus.status = 'no_shift_data';
+                workingHoursStatus.lateMinutes = 0;
             }
 
             // Create new check-in record
