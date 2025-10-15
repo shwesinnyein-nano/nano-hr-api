@@ -83,44 +83,66 @@ const checkInOut = async (req, res) => {
             let lateMinutes = 0;
 
             try {
-                // Get shift data for this employee and date
-                const shiftQuery = db.collection("shift-data")
-                    .where("employeeId", "==", employeeId)
-                    .where("date", "==", dateString)
+                // First, get employee data to find their position
+                const employeeQuery = db.collection("employees")
+                    .where("uid", "==", employeeId)
                     .limit(1);
                 
-                const shiftSnapshot = await shiftQuery.get();
+                const employeeSnapshot = await employeeQuery.get();
                 
-                if (!shiftSnapshot.empty) {
-                    const shiftData = shiftSnapshot.docs[0].data();
-                    const startTime = shiftData.startTime; // e.g., "09:00"
+                if (!employeeSnapshot.empty) {
+                    const employeeData = employeeSnapshot.docs[0].data();
+                    const employeePosition = employeeData.positionName; // e.g., "HR", "Programmer"
                     
-                    // Calculate working hours status
-                    const checkInTime = localTimeString; // e.g., "09:30"
-                    const checkInMinutes = timeToMinutes(checkInTime);
-                    const startMinutes = timeToMinutes(startTime);
-                    const lateMinutesCalc = checkInMinutes - startMinutes;
+                    console.log(`Employee ${employeeId} position: ${employeePosition}`);
                     
-                    if (lateMinutesCalc === 0) {
-                        // Check in time == Start time
-                        status = 'on_time';
-                        lateMinutes = 0;
-                    } else if (lateMinutesCalc >= 1 && lateMinutesCalc <= 15) {
-                        // Check in time is 1-15 minutes after start time
-                        status = 'in_time';
-                        lateMinutes = lateMinutesCalc;
-                    } else if (lateMinutesCalc >= 16) {
-                        // Check in time is 16+ minutes after start time
-                        status = 'late';
-                        lateMinutes = lateMinutesCalc;
+                    // Now get shift data for this position and date
+                    const shiftQuery = db.collection("shift-data")
+                        .where("positionName", "==", employeePosition)
+                        .where("date", "==", dateString)
+                        .limit(1);
+                    
+                    const shiftSnapshot = await shiftQuery.get();
+                    
+                    if (!shiftSnapshot.empty) {
+                        const shiftData = shiftSnapshot.docs[0].data();
+                        const startTime = shiftData.startTime; // e.g., "09:00"
+                        
+                        console.log(`Shift found for ${employeePosition}: ${startTime} - ${shiftData.endTime}`);
+                        
+                        // Calculate working hours status
+                        const checkInTime = localTimeString; // e.g., "09:30"
+                        const checkInMinutes = timeToMinutes(checkInTime);
+                        const startMinutes = timeToMinutes(startTime);
+                        const lateMinutesCalc = checkInMinutes - startMinutes;
+                        
+                        if (lateMinutesCalc === 0) {
+                            // Check in time == Start time
+                            status = 'on_time';
+                            lateMinutes = 0;
+                        } else if (lateMinutesCalc >= 1 && lateMinutesCalc <= 15) {
+                            // Check in time is 1-15 minutes after start time
+                            status = 'in_time';
+                            lateMinutes = lateMinutesCalc;
+                        } else if (lateMinutesCalc >= 16) {
+                            // Check in time is 16+ minutes after start time
+                            status = 'late';
+                            lateMinutes = lateMinutesCalc;
+                        } else {
+                            // Check in before start time (early)
+                            status = 'early';
+                            lateMinutes = 0;
+                        }
                     } else {
-                        // Check in before start time (early)
-                        status = 'early';
+                        // No shift data found for this position and date
+                        console.log(`No shift data found for position: ${employeePosition} on date: ${dateString}`);
+                        status = 'no_shift_data';
                         lateMinutes = 0;
                     }
                 } else {
-                    // No shift data found - set default status
-                    status = 'no_shift_data';
+                    // Employee not found
+                    console.log(`Employee not found: ${employeeId}`);
+                    status = 'employee_not_found';
                     lateMinutes = 0;
                 }
             } catch (shiftError) {
