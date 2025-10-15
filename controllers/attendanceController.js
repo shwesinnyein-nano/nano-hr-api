@@ -97,12 +97,30 @@ const checkInOut = async (req, res) => {
                     console.log(`Employee ${employeeId} position: ${employeePosition}`);
                     
                     // Now get shift data for this position and date
-                    const shiftQuery = db.collection("shift-data")
+                    // Try multiple possible field names for date
+                    let shiftQuery = db.collection("shift-data")
                         .where("positionName", "==", employeePosition)
-                        .where("date", "==", dateString)
+                        .where("assignDate", "==", dateString + " ")
                         .limit(1);
                     
-                    const shiftSnapshot = await shiftQuery.get();
+                    let shiftSnapshot = await shiftQuery.get();
+                    
+                    // If not found, try with different date field
+                    if (shiftSnapshot.empty) {
+                        shiftQuery = db.collection("shift-data")
+                            .where("positionName", "==", employeePosition)
+                            .where("createdDate", "==", dateString + " ")
+                            .limit(1);
+                        shiftSnapshot = await shiftQuery.get();
+                    }
+                    
+                    // If still not found, try without date filter (just position)
+                    if (shiftSnapshot.empty) {
+                        shiftQuery = db.collection("shift-data")
+                            .where("positionName", "==", employeePosition)
+                            .limit(1);
+                        shiftSnapshot = await shiftQuery.get();
+                    }
                     
                     if (!shiftSnapshot.empty) {
                         const shiftData = shiftSnapshot.docs[0].data();
