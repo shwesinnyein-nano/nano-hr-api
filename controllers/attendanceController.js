@@ -84,7 +84,7 @@ const checkInOut = async (req, res) => {
                 lateMinutes: 0,
                 startTime: null,
                 endTime: null,
-                gracePeriod: 15 // 15 minutes grace period
+                gracePeriod: 15 // 1-15 minutes = In Time, 16+ minutes = Late
             };
 
             try {
@@ -108,14 +108,24 @@ const checkInOut = async (req, res) => {
                     const checkInTime = localTimeString; // e.g., "09:30"
                     const checkInMinutes = timeToMinutes(checkInTime);
                     const startMinutes = timeToMinutes(startTime);
-                    const gracePeriodMinutes = workingHoursStatus.gracePeriod;
+                    const lateMinutes = checkInMinutes - startMinutes;
                     
-                    if (checkInMinutes <= startMinutes + gracePeriodMinutes) {
+                    if (lateMinutes === 0) {
+                        // Check in time == Start time
                         workingHoursStatus.status = 'on_time';
                         workingHoursStatus.lateMinutes = 0;
-                    } else {
+                    } else if (lateMinutes >= 1 && lateMinutes <= 15) {
+                        // Check in time is 1-15 minutes after start time
+                        workingHoursStatus.status = 'in_time';
+                        workingHoursStatus.lateMinutes = lateMinutes;
+                    } else if (lateMinutes >= 16) {
+                        // Check in time is 16+ minutes after start time
                         workingHoursStatus.status = 'late';
-                        workingHoursStatus.lateMinutes = checkInMinutes - startMinutes;
+                        workingHoursStatus.lateMinutes = lateMinutes;
+                    } else {
+                        // Check in before start time (early)
+                        workingHoursStatus.status = 'early';
+                        workingHoursStatus.lateMinutes = 0;
                     }
                 }
             } catch (shiftError) {
