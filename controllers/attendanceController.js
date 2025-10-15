@@ -1,6 +1,12 @@
 const { v4: uuidV4 } = require('uuid');
 const { admin, db } = require("../config/firebaseConfig");
 
+// Helper function to convert time string to minutes
+const timeToMinutes = (timeString) => {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
+};
+
 // Check In/Out API with proper record checking
 const checkInOut = async (req, res) => {
     console.log("Check In/Out called", req.body);
@@ -72,6 +78,51 @@ const checkInOut = async (req, res) => {
                 }
             }
 
+            // Get employee's shift data for working hours validation
+            let workingHoursStatus = {
+                status: 'unknown',
+                lateMinutes: 0,
+                startTime: null,
+                endTime: null,
+                gracePeriod: 15 // 15 minutes grace period
+            };
+
+            try {
+                // Get shift data for this employee and date
+                const shiftQuery = db.collection("shift-data")
+                    .where("employeeId", "==", employeeId)
+                    .where("date", "==", dateString)
+                    .limit(1);
+                
+                const shiftSnapshot = await shiftQuery.get();
+                
+                if (!shiftSnapshot.empty) {
+                    const shiftData = shiftSnapshot.docs[0].data();
+                    const startTime = shiftData.startTime; // e.g., "09:00"
+                    const endTime = shiftData.endTime;     // e.g., "19:00"
+                    
+                    workingHoursStatus.startTime = startTime;
+                    workingHoursStatus.endTime = endTime;
+                    
+                    // Calculate working hours status
+                    const checkInTime = localTimeString; // e.g., "09:30"
+                    const checkInMinutes = timeToMinutes(checkInTime);
+                    const startMinutes = timeToMinutes(startTime);
+                    const gracePeriodMinutes = workingHoursStatus.gracePeriod;
+                    
+                    if (checkInMinutes <= startMinutes + gracePeriodMinutes) {
+                        workingHoursStatus.status = 'on_time';
+                        workingHoursStatus.lateMinutes = 0;
+                    } else {
+                        workingHoursStatus.status = 'late';
+                        workingHoursStatus.lateMinutes = checkInMinutes - startMinutes;
+                    }
+                }
+            } catch (shiftError) {
+                console.log("Could not fetch shift data:", shiftError.message);
+                // Continue without shift validation
+            }
+
             // Create new check-in record
             const uid = uuidV4();
             const checkRecord = {
@@ -89,7 +140,8 @@ const checkInOut = async (req, res) => {
                 checkOutAt: null,
                 timestamp: thaiTime.toISOString(),
                 createdAt: thaiTime.toISOString(),
-                updatedAt: thaiTime.toISOString()
+                updatedAt: thaiTime.toISOString(),
+                workingHours: workingHoursStatus
             };
 
             // Save to Firestore
@@ -110,7 +162,8 @@ const checkInOut = async (req, res) => {
                     date: dateString,
                     checkInAt: localTimeString,
                     checkOutAt: null,
-                    timestamp: currentDate.toISOString()
+                    timestamp: currentDate.toISOString(),
+                    workingHours: workingHoursStatus
                 }
             });
 
