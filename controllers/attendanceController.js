@@ -816,10 +816,30 @@ const getMyAttendanceHistory = async (req, res) => {
         const limitNum = limit ? parseInt(limit) : 100;
         const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 200);
 
+        // First, get all records for the employee (without date filtering to avoid index issues)
         let query = db.collection("employee-attendance")
             .where("employeeId", "==", employeeId);
 
-        // Apply year/month filtering if provided
+        const snapshot = await query.get();
+        
+        if (snapshot.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "No attendance records found for this employee"
+            });
+        }
+
+        const records = [];
+        snapshot.forEach(doc => {
+            records.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Apply year/month filtering in memory to avoid Firebase index issues
+        let filteredRecords = records;
+        
         if (year && month) {
             // Validate year and month
             const yearNum = parseInt(year);
@@ -839,16 +859,17 @@ const getMyAttendanceHistory = async (req, res) => {
                 });
             }
 
-            // Create date range for the specific year and month
-            const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
-            const endDate = new Date(yearNum, monthNum, 0).toISOString().split('T')[0]; // Last day of month
+            // Filter by year and month
+            const targetYear = year.toString();
+            const targetMonth = month.toString().padStart(2, '0');
             
-            query = query
-                .where("date", ">=", startDate)
-                .where("date", "<=", endDate);
+            filteredRecords = records.filter(record => {
+                const recordDate = record.date; // Format: YYYY-MM-DD
+                return recordDate.startsWith(`${targetYear}-${targetMonth}`);
+            });
                 
             console.log(`Filtering by year: ${year}, month: ${month}`);
-            console.log(`Date range: ${startDate} to ${endDate}`);
+            console.log(`Filtered records: ${filteredRecords.length} out of ${records.length}`);
         } else if (year && !month) {
             // Filter by year only
             const yearNum = parseInt(year);
@@ -860,36 +881,25 @@ const getMyAttendanceHistory = async (req, res) => {
                 });
             }
 
-            const startDate = `${year}-01-01`;
-            const endDate = `${year}-12-31`;
-            
-            query = query
-                .where("date", ">=", startDate)
-                .where("date", "<=", endDate);
+            const targetYear = year.toString();
+            filteredRecords = records.filter(record => {
+                const recordDate = record.date; // Format: YYYY-MM-DD
+                return recordDate.startsWith(targetYear);
+            });
                 
             console.log(`Filtering by year: ${year}`);
-            console.log(`Date range: ${startDate} to ${endDate}`);
+            console.log(`Filtered records: ${filteredRecords.length} out of ${records.length}`);
         }
 
-        const snapshot = await query.get();
-        
-        if (snapshot.empty) {
+        if (filteredRecords.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: "No attendance records found for the specified period"
             });
         }
 
-        const records = [];
-        snapshot.forEach(doc => {
-            records.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-
-        // Sort records by date (newest first), then by time (newest first)
-        records.sort((a, b) => {
+        // Sort filtered records by date (newest first), then by time (newest first)
+        filteredRecords.sort((a, b) => {
             // First sort by date (newest first)
             if (a.date !== b.date) {
                 return b.date.localeCompare(a.date);
@@ -900,24 +910,24 @@ const getMyAttendanceHistory = async (req, res) => {
         });
 
         // Apply limit
-        const limitedRecords = records.slice(0, validLimit);
+        const limitedRecords = filteredRecords.slice(0, validLimit);
 
         // Calculate summary statistics
         const summary = {
-            totalDays: new Set(records.map(r => r.date)).size,
-            totalRecords: records.length,
-            checkInCount: records.filter(r => r.type === 'checkin').length,
-            checkOutCount: records.filter(r => r.type === 'checkout').length,
-            lateCount: records.filter(r => r.status === 'late').length,
-            onTimeCount: records.filter(r => r.status === 'on_time').length,
-            earlyCount: records.filter(r => r.status === 'early').length
+            totalDays: new Set(filteredRecords.map(r => r.date)).size,
+            totalRecords: filteredRecords.length,
+            checkInCount: filteredRecords.filter(r => r.type === 'checkin').length,
+            checkOutCount: filteredRecords.filter(r => r.type === 'checkout').length,
+            lateCount: filteredRecords.filter(r => r.status === 'late').length,
+            onTimeCount: filteredRecords.filter(r => r.status === 'on_time').length,
+            earlyCount: filteredRecords.filter(r => r.status === 'early').length
         };
 
         res.status(200).json({
             success: true,
             message: "My attendance history retrieved successfully",
             count: limitedRecords.length,
-            totalRecords: records.length,
+            totalRecords: filteredRecords.length,
             summary: summary,
             filters: {
                 year: year || null,
@@ -929,7 +939,7 @@ const getMyAttendanceHistory = async (req, res) => {
         
         console.log("My attendance history retrieved:", {
             employeeId,
-            totalRecords: records.length,
+            totalRecords: filteredRecords.length,
             limitedRecords: limitedRecords.length,
             summary
         });
