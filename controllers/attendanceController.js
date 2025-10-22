@@ -798,6 +798,152 @@ const getAttendanceByEmployeeId = async (req, res) => {
     }
 };
 
+// Get logged-in employee attendance history with year/month filtering
+const getMyAttendanceHistory = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        const { year, month, limit } = req.query;
+        
+        console.log("getMyAttendanceHistory called", { employeeId, year, month, limit });
+        
+        if (!employeeId) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID is required"
+            });
+        }
+
+        const limitNum = limit ? parseInt(limit) : 100;
+        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 200);
+
+        let query = db.collection("employee-attendance")
+            .where("employeeId", "==", employeeId);
+
+        // Apply year/month filtering if provided
+        if (year && month) {
+            // Validate year and month
+            const yearNum = parseInt(year);
+            const monthNum = parseInt(month);
+            
+            if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid year. Must be between 2020-2030"
+                });
+            }
+            
+            if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid month. Must be between 1-12"
+                });
+            }
+
+            // Create date range for the specific year and month
+            const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+            const endDate = new Date(yearNum, monthNum, 0).toISOString().split('T')[0]; // Last day of month
+            
+            query = query
+                .where("date", ">=", startDate)
+                .where("date", "<=", endDate);
+                
+            console.log(`Filtering by year: ${year}, month: ${month}`);
+            console.log(`Date range: ${startDate} to ${endDate}`);
+        } else if (year && !month) {
+            // Filter by year only
+            const yearNum = parseInt(year);
+            
+            if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid year. Must be between 2020-2030"
+                });
+            }
+
+            const startDate = `${year}-01-01`;
+            const endDate = `${year}-12-31`;
+            
+            query = query
+                .where("date", ">=", startDate)
+                .where("date", "<=", endDate);
+                
+            console.log(`Filtering by year: ${year}`);
+            console.log(`Date range: ${startDate} to ${endDate}`);
+        }
+
+        const snapshot = await query.get();
+        
+        if (snapshot.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "No attendance records found for the specified period"
+            });
+        }
+
+        const records = [];
+        snapshot.forEach(doc => {
+            records.push({
+                id: doc.id,
+                ...doc.data()
+            });
+        });
+
+        // Sort records by date (newest first), then by time (newest first)
+        records.sort((a, b) => {
+            // First sort by date (newest first)
+            if (a.date !== b.date) {
+                return b.date.localeCompare(a.date);
+            }
+            
+            // If same date, sort by time (newest first)
+            return b.time.localeCompare(a.time);
+        });
+
+        // Apply limit
+        const limitedRecords = records.slice(0, validLimit);
+
+        // Calculate summary statistics
+        const summary = {
+            totalDays: new Set(records.map(r => r.date)).size,
+            totalRecords: records.length,
+            checkInCount: records.filter(r => r.type === 'checkin').length,
+            checkOutCount: records.filter(r => r.type === 'checkout').length,
+            lateCount: records.filter(r => r.status === 'late').length,
+            onTimeCount: records.filter(r => r.status === 'on_time').length,
+            earlyCount: records.filter(r => r.status === 'early').length
+        };
+
+        res.status(200).json({
+            success: true,
+            message: "My attendance history retrieved successfully",
+            count: limitedRecords.length,
+            totalRecords: records.length,
+            summary: summary,
+            filters: {
+                year: year || null,
+                month: month || null,
+                limit: validLimit
+            },
+            data: limitedRecords
+        });
+        
+        console.log("My attendance history retrieved:", {
+            employeeId,
+            totalRecords: records.length,
+            limitedRecords: limitedRecords.length,
+            summary
+        });
+        
+    } catch (error) {
+        console.error("Get my attendance history error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     checkInOut,
     getCheckInOutHistory,
@@ -805,5 +951,6 @@ module.exports = {
     getAttendanceByEmployeeAndDate,
     checkAutoCheckInNeeded,
     getTodayAttendanceStatus,
-    getAttendanceByEmployeeId
+    getAttendanceByEmployeeId,
+    getMyAttendanceHistory
 };
