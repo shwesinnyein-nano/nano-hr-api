@@ -9,6 +9,7 @@ router.get("/status/:employeeId", attendanceController.getTodayAttendanceStatus)
 router.get("/history/:employeeId", attendanceController.getCheckInOutHistory);
 router.get("/history", attendanceController.getAllAttendanceHistory);
 router.get("/my-history/:employeeId", attendanceController.getMyAttendanceHistory);
+router.get("/search-history", attendanceController.searchEmployeeAttendance);
 router.get("/:employeeId/:date", attendanceController.getAttendanceByEmployeeAndDate);
 router.get("/auto-checkin/:employeeId", attendanceController.checkAutoCheckInNeeded);
 router.get("/:employeeId", attendanceController.getAttendanceByEmployeeId);

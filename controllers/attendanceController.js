@@ -954,6 +954,198 @@ const getMyAttendanceHistory = async (req, res) => {
     }
 };
 
+// Search employee attendance by name/query and date filter
+const searchEmployeeAttendance = async (req, res) => {
+    try {
+        const { query, startDate, endDate, limit } = req.query;
+        
+        console.log("searchEmployeeAttendance called", { query, startDate, endDate, limit });
+        
+        const limitNum = limit ? parseInt(limit) : 100;
+        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 500);
+
+        let employeeIds = [];
+        
+        // Step 1: Search employees by query (name, ID, etc.)
+        if (query && query.trim()) {
+            const searchQuery = query.trim().toLowerCase();
+            
+            // Search in employees collection
+            const employeesSnapshot = await db.collection("employees").get();
+            
+            employeesSnapshot.forEach(doc => {
+                const employeeData = doc.data();
+                const employeeName = (employeeData.name || '').toLowerCase();
+                const employeeId = (employeeData.uid || '').toLowerCase();
+                const employeeCode = (employeeData.employeeCode || '').toLowerCase();
+                
+                // Check if query matches name, ID, or employee code
+                if (employeeName.includes(searchQuery) || 
+                    employeeId.includes(searchQuery) || 
+                    employeeCode.includes(searchQuery)) {
+                    employeeIds.push(employeeData.uid);
+                }
+            });
+            
+            console.log(`Found ${employeeIds.length} employees matching query: "${query}"`);
+            
+            if (employeeIds.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: `No employees found matching "${query}"`
+                });
+            }
+        } else {
+            // If no query provided, get all employees
+            const employeesSnapshot = await db.collection("employees").get();
+            employeesSnapshot.forEach(doc => {
+                employeeIds.push(doc.data().uid);
+            });
+            console.log(`No query provided, searching all ${employeeIds.length} employees`);
+        }
+
+        // Step 2: Get attendance records for found employees
+        const allAttendanceRecords = [];
+        
+        for (const employeeId of employeeIds) {
+            let attendanceQuery = db.collection("employee-attendance")
+                .where("employeeId", "==", employeeId);
+            
+            const attendanceSnapshot = await attendanceQuery.get();
+            
+            attendanceSnapshot.forEach(doc => {
+                allAttendanceRecords.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+        }
+        
+        console.log(`Retrieved ${allAttendanceRecords.length} total attendance records`);
+        
+        if (allAttendanceRecords.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "No attendance records found"
+            });
+        }
+
+        // Step 3: Apply date filtering
+        let filteredRecords = allAttendanceRecords;
+        
+        if (startDate && endDate) {
+            filteredRecords = allAttendanceRecords.filter(record => {
+                const recordDate = record.date; // Format: YYYY-MM-DD
+                return recordDate >= startDate && recordDate <= endDate;
+            });
+            console.log(`Date filtered: ${filteredRecords.length} records between ${startDate} and ${endDate}`);
+        } else if (startDate) {
+            filteredRecords = allAttendanceRecords.filter(record => {
+                const recordDate = record.date;
+                return recordDate >= startDate;
+            });
+            console.log(`Date filtered: ${filteredRecords.length} records from ${startDate}`);
+        } else if (endDate) {
+            filteredRecords = allAttendanceRecords.filter(record => {
+                const recordDate = record.date;
+                return recordDate <= endDate;
+            });
+            console.log(`Date filtered: ${filteredRecords.length} records until ${endDate}`);
+        }
+
+        if (filteredRecords.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "No attendance records found for the specified criteria"
+            });
+        }
+
+        // Step 4: Sort by date (newest first), then by time (newest first)
+        filteredRecords.sort((a, b) => {
+            // First sort by date (newest first)
+            if (a.date !== b.date) {
+                return b.date.localeCompare(a.date);
+            }
+            
+            // If same date, sort by time (newest first)
+            return b.time.localeCompare(a.time);
+        });
+
+        // Step 5: Apply limit
+        const limitedRecords = filteredRecords.slice(0, validLimit);
+
+        // Step 6: Get employee details for the records
+        const employeeDetails = {};
+        for (const employeeId of employeeIds) {
+            const employeeSnapshot = await db.collection("employees")
+                .where("uid", "==", employeeId)
+                .limit(1)
+                .get();
+            
+            if (!employeeSnapshot.empty) {
+                const employeeData = employeeSnapshot.docs[0].data();
+                employeeDetails[employeeId] = {
+                    name: employeeData.name,
+                    employeeCode: employeeData.employeeCode,
+                    position: employeeData.positionName
+                };
+            }
+        }
+
+        // Step 7: Add employee details to records
+        const enrichedRecords = limitedRecords.map(record => ({
+            ...record,
+            employeeDetails: employeeDetails[record.employeeId] || {
+                name: record.employeeName,
+                employeeCode: 'N/A',
+                position: 'N/A'
+            }
+        }));
+
+        // Step 8: Calculate summary statistics
+        const summary = {
+            totalEmployees: employeeIds.length,
+            totalRecords: filteredRecords.length,
+            checkInCount: filteredRecords.filter(r => r.type === 'checkin').length,
+            checkOutCount: filteredRecords.filter(r => r.type === 'checkout').length,
+            lateCount: filteredRecords.filter(r => r.status === 'late').length,
+            onTimeCount: filteredRecords.filter(r => r.status === 'on_time').length,
+            earlyCount: filteredRecords.filter(r => r.status === 'early').length
+        };
+
+        res.status(200).json({
+            success: true,
+            message: "Employee attendance search completed successfully",
+            count: enrichedRecords.length,
+            totalRecords: filteredRecords.length,
+            summary: summary,
+            filters: {
+                query: query || null,
+                startDate: startDate || null,
+                endDate: endDate || null,
+                limit: validLimit
+            },
+            data: enrichedRecords
+        });
+        
+        console.log("Employee attendance search completed:", {
+            query,
+            totalEmployees: employeeIds.length,
+            totalRecords: filteredRecords.length,
+            limitedRecords: enrichedRecords.length,
+            summary
+        });
+        
+    } catch (error) {
+        console.error("Search employee attendance error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     checkInOut,
     getCheckInOutHistory,
@@ -962,5 +1154,6 @@ module.exports = {
     checkAutoCheckInNeeded,
     getTodayAttendanceStatus,
     getAttendanceByEmployeeId,
-    getMyAttendanceHistory
+    getMyAttendanceHistory,
+    searchEmployeeAttendance
 };
