@@ -1228,8 +1228,13 @@ const searchAttendanceByName = async (req, res) => {
         employeesSnapshot.forEach(doc => {
             const employeeData = doc.data();
             const employeeName = (employeeData.name || '').toLowerCase();
+            const employeeId = (employeeData.uid || '').toLowerCase();
+            const employeeCode = (employeeData.employeeCode || '').toLowerCase();
             
-            if (employeeName.includes(searchQuery)) {
+            // Check if query matches name, ID, or employee code
+            if (employeeName.includes(searchQuery) || 
+                employeeId.includes(searchQuery) || 
+                employeeCode.includes(searchQuery)) {
                 matchingEmployees.push({
                     uid: employeeData.uid,
                     name: employeeData.name,
