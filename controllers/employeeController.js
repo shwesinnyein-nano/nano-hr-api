@@ -1288,6 +1288,132 @@ function getDayOfWeek(dateString) {
     return days[date.getDay()];
 }
 
+// Get employee shift for specific date (simple API)
+const getEmployeeShiftByDate = async (req, res) => {
+    try {
+        const { employeeId, date } = req.query;
+        
+        console.log("Get employee shift by date called", { employeeId, date });
+        
+        if (!employeeId || !date) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee ID and date are required"
+            });
+        }
+
+        // Step 1: Get employee data
+        const employeesRef = db.collection("employees");
+        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
+
+        if (employeeQuery.empty) {
+            return res.status(404).json({
+                success: false,
+                message: "Employee not found"
+            });
+        }
+
+        const employeeDoc = employeeQuery.docs[0];
+        const employeeData = employeeDoc.data();
+        
+        // Step 2: Get shift data for this employee and date
+        const shiftDataRef = db.collection("shift-data");
+        let shiftData = null;
+        
+        // Try to find shift with employeeId and assignDate
+        let shiftQuery = shiftDataRef
+            .where("employeeId", "==", employeeId)
+            .where("assignDate", "==", date + " ");
+        
+        let shiftSnapshot = await shiftQuery.limit(1).get();
+        
+        if (!shiftSnapshot.empty) {
+            shiftData = {
+                id: shiftSnapshot.docs[0].id,
+                ...shiftSnapshot.docs[0].data()
+            };
+        } else {
+            // Try with createdDate if assignDate doesn't exist
+            shiftQuery = shiftDataRef
+                .where("employeeId", "==", employeeId)
+                .where("createdDate", "==", date + " ");
+            
+            shiftSnapshot = await shiftQuery.limit(1).get();
+            
+            if (!shiftSnapshot.empty) {
+                shiftData = {
+                    id: shiftSnapshot.docs[0].id,
+                    ...shiftSnapshot.docs[0].data()
+                };
+            } else {
+                // Try by positionName and workingDays if no employee-specific shift
+                const dayOfWeek = getDayOfWeek(date);
+                const positionName = employeeData.positionName;
+                
+                shiftQuery = shiftDataRef
+                    .where("positionName", "==", positionName)
+                    .where("workingDays", "array-contains", dayOfWeek);
+                
+                shiftSnapshot = await shiftQuery.limit(1).get();
+                
+                if (!shiftSnapshot.empty) {
+                    shiftData = {
+                        id: shiftSnapshot.docs[0].id,
+                        ...shiftSnapshot.docs[0].data()
+                    };
+                }
+            }
+        }
+
+        // Prepare response
+        if (shiftData) {
+            res.json({
+                success: true,
+                message: "Shift data retrieved successfully",
+                data: {
+                    employeeId: employeeId,
+                    employeeName: `${employeeData.firstName || ''} ${employeeData.lastName || ''}`.trim(),
+                    positionName: employeeData.positionName,
+                    date: date,
+                    shift: {
+                        id: shiftData.id,
+                        shiftId: shiftData.shiftId,
+                        shiftUid: shiftData.shiftUid,
+                        shiftName: shiftData.shiftName,
+                        shiftNameEN: shiftData.shiftNameEN,
+                        shiftTime: shiftData.shiftTime,
+                        startTime: shiftData.startTime,
+                        endTime: shiftData.endTime,
+                        workingDays: shiftData.workingDays,
+                        assignDate: shiftData.assignDate,
+                        createdDate: shiftData.createdDate
+                    }
+                }
+            });
+        } else {
+            res.json({
+                success: true,
+                message: "No shift data found for this date",
+                data: {
+                    employeeId: employeeId,
+                    employeeName: `${employeeData.firstName || ''} ${employeeData.lastName || ''}`.trim(),
+                    positionName: employeeData.positionName,
+                    date: date,
+                    shift: null
+                }
+            });
+        }
+
+    } catch (error) {
+        console.error("❌ Error getting employee shift by date:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     login,
     register,
@@ -1303,5 +1429,6 @@ module.exports = {
     checkEmployee,
     getEmployeeListInternal,
     getEmployeeWithShiftData,
-    getShiftDataWithFilter
+    getShiftDataWithFilter,
+    getEmployeeShiftByDate
 };
