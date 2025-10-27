@@ -954,12 +954,12 @@ const getMyAttendanceHistory = async (req, res) => {
     }
 };
 
-// Search employee attendance by name/query and date filter
+// Search employee attendance by name/query with date, year, or month filter
 const searchEmployeeAttendance = async (req, res) => {
     try {
-        const { query, startDate, endDate, limit } = req.query;
+        const { query, startDate, endDate, year, month, limit } = req.query;
         
-        console.log("searchEmployeeAttendance called", { query, startDate, endDate, limit });
+        console.log("searchEmployeeAttendance called", { query, startDate, endDate, year, month, limit });
         
         const limitNum = limit ? parseInt(limit) : 100;
         const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 500);
@@ -1053,15 +1053,67 @@ const searchEmployeeAttendance = async (req, res) => {
             console.log(`Date filtered: ${filteredRecords.length} records until ${endDate}`);
         }
 
-        if (filteredRecords.length === 0) {
+        // Step 4: Apply year/month filtering
+        let finalRecords = filteredRecords;
+        
+        if (year && month) {
+            // Validate year and month
+            const yearNum = parseInt(year);
+            const monthNum = parseInt(month);
+            
+            if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid year. Must be between 2020-2030"
+                });
+            }
+            
+            if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid month. Must be between 1-12"
+                });
+            }
+
+            // Filter by year and month
+            const targetYear = year.toString();
+            const targetMonth = month.toString().padStart(2, '0');
+            
+            finalRecords = filteredRecords.filter(record => {
+                const recordDate = record.date; // Format: YYYY-MM-DD
+                return recordDate.startsWith(`${targetYear}-${targetMonth}`);
+            });
+                
+            console.log(`Year/Month filtered: ${finalRecords.length} records for ${year}-${month}`);
+        } else if (year && !month) {
+            // Filter by year only
+            const yearNum = parseInt(year);
+            
+            if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid year. Must be between 2020-2030"
+                });
+            }
+
+            const targetYear = year.toString();
+            finalRecords = filteredRecords.filter(record => {
+                const recordDate = record.date; // Format: YYYY-MM-DD
+                return recordDate.startsWith(targetYear);
+            });
+                
+            console.log(`Year filtered: ${finalRecords.length} records for ${year}`);
+        }
+
+        if (finalRecords.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: "No attendance records found for the specified criteria"
             });
         }
 
-        // Step 4: Sort by date (newest first), then by time (newest first)
-        filteredRecords.sort((a, b) => {
+        // Step 5: Sort by date (newest first), then by time (newest first)
+        finalRecords.sort((a, b) => {
             // First sort by date (newest first)
             if (a.date !== b.date) {
                 return b.date.localeCompare(a.date);
@@ -1071,10 +1123,10 @@ const searchEmployeeAttendance = async (req, res) => {
             return b.time.localeCompare(a.time);
         });
 
-        // Step 5: Apply limit
-        const limitedRecords = filteredRecords.slice(0, validLimit);
+        // Step 6: Apply limit
+        const limitedRecords = finalRecords.slice(0, validLimit);
 
-        // Step 6: Get employee details for the records
+        // Step 7: Get employee details for the records
         const employeeDetails = {};
         for (const employeeId of employeeIds) {
             const employeeSnapshot = await db.collection("employees")
@@ -1092,7 +1144,7 @@ const searchEmployeeAttendance = async (req, res) => {
             }
         }
 
-        // Step 7: Add employee details to records
+        // Step 8: Add employee details to records
         const enrichedRecords = limitedRecords.map(record => ({
             ...record,
             employeeDetails: employeeDetails[record.employeeId] || {
@@ -1102,27 +1154,29 @@ const searchEmployeeAttendance = async (req, res) => {
             }
         }));
 
-        // Step 8: Calculate summary statistics
+        // Step 9: Calculate summary statistics
         const summary = {
             totalEmployees: employeeIds.length,
-            totalRecords: filteredRecords.length,
-            checkInCount: filteredRecords.filter(r => r.type === 'checkin').length,
-            checkOutCount: filteredRecords.filter(r => r.type === 'checkout').length,
-            lateCount: filteredRecords.filter(r => r.status === 'late').length,
-            onTimeCount: filteredRecords.filter(r => r.status === 'on_time').length,
-            earlyCount: filteredRecords.filter(r => r.status === 'early').length
+            totalRecords: finalRecords.length,
+            checkInCount: finalRecords.filter(r => r.type === 'checkin').length,
+            checkOutCount: finalRecords.filter(r => r.type === 'checkout').length,
+            lateCount: finalRecords.filter(r => r.status === 'late').length,
+            onTimeCount: finalRecords.filter(r => r.status === 'on_time').length,
+            earlyCount: finalRecords.filter(r => r.status === 'early').length
         };
 
         res.status(200).json({
             success: true,
             message: "Employee attendance search completed successfully",
             count: enrichedRecords.length,
-            totalRecords: filteredRecords.length,
+            totalRecords: finalRecords.length,
             summary: summary,
             filters: {
                 query: query || null,
                 startDate: startDate || null,
                 endDate: endDate || null,
+                year: year || null,
+                month: month || null,
                 limit: validLimit
             },
             data: enrichedRecords
@@ -1130,8 +1184,10 @@ const searchEmployeeAttendance = async (req, res) => {
         
         console.log("Employee attendance search completed:", {
             query,
+            year,
+            month,
             totalEmployees: employeeIds.length,
-            totalRecords: filteredRecords.length,
+            totalRecords: finalRecords.length,
             limitedRecords: enrichedRecords.length,
             summary
         });
