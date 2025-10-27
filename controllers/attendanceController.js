@@ -1221,70 +1221,31 @@ const searchAttendanceByName = async (req, res) => {
 
         const searchQuery = name.trim().toLowerCase();
         
-        // Step 1: Find matching employees
-        const employeesSnapshot = await db.collection("employees").get();
-        const matchingEmployees = [];
+        // Step 1: Get all attendance records and filter by employeeName
+        const attendanceSnapshot = await db.collection("employee-attendance").get();
+        const allRecords = [];
+        const uniqueEmployees = new Set();
         
-        employeesSnapshot.forEach(doc => {
-            const employeeData = doc.data();
-            const firstName = (employeeData.firstName || '').toLowerCase();
-            const lastName = (employeeData.lastName || '').toLowerCase();
-            const fullName = `${firstName} ${lastName}`.trim();
-            const employeeId = (employeeData.uid || '').toLowerCase();
-            const employeeCode = (employeeData.employeeCode || '').toLowerCase();
+        attendanceSnapshot.forEach(doc => {
+            const attendanceData = doc.data();
+            const employeeName = (attendanceData.employeeName || '').toLowerCase();
             
-            // Check if query matches firstName, lastName, fullName, ID, or employee code
-            if (firstName.includes(searchQuery) || 
-                lastName.includes(searchQuery) || 
-                fullName.includes(searchQuery) ||
-                employeeId.includes(searchQuery) || 
-                employeeCode.includes(searchQuery)) {
-                matchingEmployees.push({
-                    uid: employeeData.uid,
-                    name: fullName || employeeData.firstName || employeeData.lastName || '',
-                    employeeCode: employeeData.employeeCode,
-                    positionName: employeeData.positionName
+            // Check if employeeName includes the search query
+            if (employeeName.includes(searchQuery)) {
+                allRecords.push({
+                    id: doc.id,
+                    ...attendanceData
                 });
+                uniqueEmployees.add(attendanceData.employeeId);
             }
         });
         
-        console.log(`Found ${matchingEmployees.length} employees matching "${name}"`);
-        
-        if (matchingEmployees.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: `No employees found matching "${name}"`
-            });
-        }
-
-        // Step 2: Get attendance records for matching employees
-        const allRecords = [];
-        
-        for (const employee of matchingEmployees) {
-            let attendanceQuery = db.collection("employee-attendance")
-                .where("employeeId", "==", employee.uid);
-            
-            const attendanceSnapshot = await attendanceQuery.get();
-            
-            attendanceSnapshot.forEach(doc => {
-                allRecords.push({
-                    id: doc.id,
-                    ...doc.data(),
-                    employeeInfo: {
-                        name: employee.name,
-                        employeeCode: employee.employeeCode,
-                        positionName: employee.positionName
-                    }
-                });
-            });
-        }
-        
-        console.log(`Retrieved ${allRecords.length} total attendance records`);
+        console.log(`Found ${allRecords.length} attendance records matching "${name}" for ${uniqueEmployees.size} employees`);
         
         if (allRecords.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: "No attendance records found for matching employees"
+                message: `No attendance records found matching "${name}"`
             });
         }
 
@@ -1368,7 +1329,7 @@ const searchAttendanceByName = async (req, res) => {
 
         // Step 7: Calculate summary statistics
         const summary = {
-            totalEmployees: matchingEmployees.length,
+            totalEmployees: uniqueEmployees.size,
             totalRecords: filteredRecords.length,
             checkInCount: filteredRecords.filter(r => r.type === 'checkin').length,
             checkOutCount: filteredRecords.filter(r => r.type === 'checkout').length,
@@ -1398,7 +1359,7 @@ const searchAttendanceByName = async (req, res) => {
             date,
             year,
             month,
-            totalEmployees: matchingEmployees.length,
+            totalEmployees: uniqueEmployees.size,
             totalRecords: filteredRecords.length,
             limitedRecords: limitedRecords.length
         });
