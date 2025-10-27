@@ -1227,17 +1227,21 @@ const searchAttendanceByName = async (req, res) => {
         
         employeesSnapshot.forEach(doc => {
             const employeeData = doc.data();
-            const employeeName = (employeeData.name || '').toLowerCase();
+            const firstName = (employeeData.firstName || '').toLowerCase();
+            const lastName = (employeeData.lastName || '').toLowerCase();
+            const fullName = `${firstName} ${lastName}`.trim();
             const employeeId = (employeeData.uid || '').toLowerCase();
             const employeeCode = (employeeData.employeeCode || '').toLowerCase();
             
-            // Check if query matches name, ID, or employee code
-            if (employeeName.includes(searchQuery) || 
+            // Check if query matches firstName, lastName, fullName, ID, or employee code
+            if (firstName.includes(searchQuery) || 
+                lastName.includes(searchQuery) || 
+                fullName.includes(searchQuery) ||
                 employeeId.includes(searchQuery) || 
                 employeeCode.includes(searchQuery)) {
                 matchingEmployees.push({
                     uid: employeeData.uid,
-                    name: employeeData.name,
+                    name: fullName || employeeData.firstName || employeeData.lastName || '',
                     employeeCode: employeeData.employeeCode,
                     positionName: employeeData.positionName
                 });
