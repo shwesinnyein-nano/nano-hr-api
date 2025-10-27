@@ -3,7 +3,10 @@ const { admin, db } = require("../config/firebaseConfig");
 
 // Helper function to convert time string to minutes
 const timeToMinutes = (timeString) => {
-    const [hours, minutes] = timeString.split(':').map(Number);
+    // Handle both HH:MM and HH:MM:SS formats
+    const parts = timeString.split(':');
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
     return hours * 60 + minutes;
 };
 
@@ -99,7 +102,7 @@ const checkInOut = async (req, res) => {
                     // Now get shift data for this position and date
                     // Try multiple possible field names for date
                     let shiftQuery = db.collection("shift-data")
-                        .where("positionName", "==", employeePosition)
+                        .where("employeeId", "==", employeeId)
                         .where("assignDate", "==", dateString + " ")
                         .limit(1);
                     
@@ -108,18 +111,37 @@ const checkInOut = async (req, res) => {
                     // If not found, try with different date field
                     if (shiftSnapshot.empty) {
                         shiftQuery = db.collection("shift-data")
+                            .where("employeeId", "==", employeeId)
+                            .where("createdDate", "==", dateString + " ")
+                            .limit(1);
+                        shiftSnapshot = await shiftQuery.get();
+                    }
+                    
+                    // If still not found, try by position and date
+                    if (shiftSnapshot.empty) {
+                        shiftQuery = db.collection("shift-data")
+                            .where("positionName", "==", employeePosition)
+                            .where("assignDate", "==", dateString + " ")
+                            .limit(1);
+                        shiftSnapshot = await shiftQuery.get();
+                    }
+                    
+                    // If still not found, try position with different date field
+                    if (shiftSnapshot.empty) {
+                        shiftQuery = db.collection("shift-data")
                             .where("positionName", "==", employeePosition)
                             .where("createdDate", "==", dateString + " ")
                             .limit(1);
                         shiftSnapshot = await shiftQuery.get();
                     }
                     
-                    // If still not found, try without date filter (just position)
+                    // Last resort: try without date filter (just position) - this should rarely happen
                     if (shiftSnapshot.empty) {
                         shiftQuery = db.collection("shift-data")
                             .where("positionName", "==", employeePosition)
                             .limit(1);
                         shiftSnapshot = await shiftQuery.get();
+                        console.log(`Warning: Using fallback shift for position ${employeePosition} - no date-specific shift found`);
                     }
                     
                     if (!shiftSnapshot.empty) {
@@ -129,10 +151,12 @@ const checkInOut = async (req, res) => {
                         console.log(`Shift found for ${employeePosition}: ${startTime} - ${shiftData.endTime}`);
                         
                         // Calculate working hours status
-                        const checkInTime = localTimeString; // e.g., "09:30"
+                        const checkInTime = localTimeString; // e.g., "09:30:18"
                         const checkInMinutes = timeToMinutes(checkInTime);
                         const startMinutes = timeToMinutes(startTime);
                         const lateMinutesCalc = checkInMinutes - startMinutes;
+                        
+                        console.log(`Time calculation: Check-in ${checkInTime} (${checkInMinutes} min) vs Start ${startTime} (${startMinutes} min) = ${lateMinutesCalc} min late`);
                         
                         if (lateMinutesCalc === 0) {
                             // Check in time == Start time
