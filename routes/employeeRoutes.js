@@ -10,14 +10,18 @@ router.post("/check-employee", employeeController.checkEmployee);
 router.post("/login", employeeController.login);
 router.post("/register", employeeController.register);
 router.post("/check-email", employeeController.checkEmail);
-router.get("/profile/:uid", employeeController.getProfileByUid);
+
+// Specific routes before parameterized routes
 router.get("/list", employeeController.getEmployeeList);
 router.get("/stats", employeeController.getEmployeeStats);
 router.get("/search", employeeController.searchEmployees);
 router.get("/filter-options", employeeController.getEmployeeFilterOptions);
-router.get("/:employeeId/shift-data", employeeController.getEmployeeWithShiftData);
 router.get("/shift-data/filter", authenticateToken, employeeController.getShiftDataWithFilter);
 router.get("/shift/get-by-date", employeeController.getEmployeeShiftByDate);
+
+// Parameterized routes (must come after specific routes)
+router.get("/profile/:uid", employeeController.getProfileByUid);
+router.get("/:employeeId/shift-data", employeeController.getEmployeeWithShiftData);
 
 // Attendance routes moved to /attendance
 
