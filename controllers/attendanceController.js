@@ -1208,30 +1208,34 @@ const searchAttendanceByName = async (req, res) => {
         const { name, date, year, month, limit } = req.query;
         
         console.log("searchAttendanceByName called", { name, date, year, month, limit });
-        
-        if (!name || !name.trim()) {
-            return res.status(400).json({
-                success: false,
-                message: "Employee name is required"
-            });
-        }
 
         const limitNum = limit ? parseInt(limit) : 100;
         const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 500);
 
-        const searchQuery = name.trim().toLowerCase();
+        const hasNameFilter = name && name.trim();
+        const searchQuery = hasNameFilter ? name.trim().toLowerCase() : '';
         
-        // Step 1: Get all attendance records and filter by employeeName
+        // Step 1: Get all attendance records
         const attendanceSnapshot = await db.collection("employee-attendance").get();
         const allRecords = [];
         const uniqueEmployees = new Set();
         
         attendanceSnapshot.forEach(doc => {
             const attendanceData = doc.data();
-            const employeeName = (attendanceData.employeeName || '').toLowerCase();
             
-            // Check if employeeName includes the search query
-            if (employeeName.includes(searchQuery)) {
+            // If name filter is provided, check if employeeName includes the search query
+            if (hasNameFilter) {
+                const employeeName = (attendanceData.employeeName || '').toLowerCase();
+                
+                if (employeeName.includes(searchQuery)) {
+                    allRecords.push({
+                        id: doc.id,
+                        ...attendanceData
+                    });
+                    uniqueEmployees.add(attendanceData.employeeId);
+                }
+            } else {
+                // No name filter - include all records
                 allRecords.push({
                     id: doc.id,
                     ...attendanceData
@@ -1240,12 +1244,18 @@ const searchAttendanceByName = async (req, res) => {
             }
         });
         
-        console.log(`Found ${allRecords.length} attendance records matching "${name}" for ${uniqueEmployees.size} employees`);
+        const logMessage = hasNameFilter 
+            ? `Found ${allRecords.length} attendance records matching "${name}" for ${uniqueEmployees.size} employees`
+            : `Found ${allRecords.length} total attendance records for ${uniqueEmployees.size} employees`;
+        
+        console.log(logMessage);
         
         if (allRecords.length === 0) {
             return res.status(404).json({
                 success: false,
-                message: `No attendance records found matching "${name}"`
+                message: hasNameFilter 
+                    ? `No attendance records found matching "${name}"`
+                    : "No attendance records found"
             });
         }
 
