@@ -3,6 +3,7 @@ const { db, admin } = require("./config/firebaseConfig");
 
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 
 const authRoutes = require("./routes/authRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
@@ -105,6 +106,14 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Public pages for App Store and Play Store submission
+app.get("/privacy-policy", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "privacy-policy.html"));
+});
+
+app.get("/terms-of-service", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "terms-of-service.html"));
+});
 
 app.use("/auth", authRoutes);
 app.use("/employee", employeeRoutes);
