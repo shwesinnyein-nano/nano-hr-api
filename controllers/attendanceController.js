@@ -1202,6 +1202,208 @@ const searchEmployeeAttendance = async (req, res) => {
     }
 };
 
+// Simple search by name with optional date or year/month filter
+const searchAttendanceByName = async (req, res) => {
+    try {
+        const { name, date, year, month, limit } = req.query;
+        
+        console.log("searchAttendanceByName called", { name, date, year, month, limit });
+        
+        if (!name || !name.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Employee name is required"
+            });
+        }
+
+        const limitNum = limit ? parseInt(limit) : 100;
+        const validLimit = isNaN(limitNum) || limitNum <= 0 ? 100 : Math.min(limitNum, 500);
+
+        const searchQuery = name.trim().toLowerCase();
+        
+        // Step 1: Find matching employees
+        const employeesSnapshot = await db.collection("employees").get();
+        const matchingEmployees = [];
+        
+        employeesSnapshot.forEach(doc => {
+            const employeeData = doc.data();
+            const employeeName = (employeeData.name || '').toLowerCase();
+            
+            if (employeeName.includes(searchQuery)) {
+                matchingEmployees.push({
+                    uid: employeeData.uid,
+                    name: employeeData.name,
+                    employeeCode: employeeData.employeeCode,
+                    positionName: employeeData.positionName
+                });
+            }
+        });
+        
+        console.log(`Found ${matchingEmployees.length} employees matching "${name}"`);
+        
+        if (matchingEmployees.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: `No employees found matching "${name}"`
+            });
+        }
+
+        // Step 2: Get attendance records for matching employees
+        const allRecords = [];
+        
+        for (const employee of matchingEmployees) {
+            let attendanceQuery = db.collection("employee-attendance")
+                .where("employeeId", "==", employee.uid);
+            
+            const attendanceSnapshot = await attendanceQuery.get();
+            
+            attendanceSnapshot.forEach(doc => {
+                allRecords.push({
+                    id: doc.id,
+                    ...doc.data(),
+                    employeeInfo: {
+                        name: employee.name,
+                        employeeCode: employee.employeeCode,
+                        positionName: employee.positionName
+                    }
+                });
+            });
+        }
+        
+        console.log(`Retrieved ${allRecords.length} total attendance records`);
+        
+        if (allRecords.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "No attendance records found for matching employees"
+            });
+        }
+
+        // Step 3: Apply date filter if provided
+        let filteredRecords = allRecords;
+        
+        if (date) {
+            // Filter by specific date (YYYY-MM-DD format)
+            filteredRecords = allRecords.filter(record => {
+                return record.date === date;
+            });
+            console.log(`Filtered by date ${date}: ${filteredRecords.length} records`);
+        }
+        
+        // Step 4: Apply year/month filter if provided
+        else if (year && month) {
+            // Validate year and month
+            const yearNum = parseInt(year);
+            const monthNum = parseInt(month);
+            
+            if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid year. Must be between 2020-2030"
+                });
+            }
+            
+            if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid month. Must be between 1-12"
+                });
+            }
+
+            const targetYear = year.toString();
+            const targetMonth = month.toString().padStart(2, '0');
+            
+            filteredRecords = allRecords.filter(record => {
+                return record.date.startsWith(`${targetYear}-${targetMonth}`);
+            });
+                
+            console.log(`Filtered by year/month ${year}-${month}: ${filteredRecords.length} records`);
+        }
+        
+        else if (year) {
+            // Validate year
+            const yearNum = parseInt(year);
+            
+            if (isNaN(yearNum) || yearNum < 2020 || yearNum > 2030) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid year. Must be between 2020-2030"
+                });
+            }
+
+            const targetYear = year.toString();
+            filteredRecords = allRecords.filter(record => {
+                return record.date.startsWith(targetYear);
+            });
+                
+            console.log(`Filtered by year ${year}: ${filteredRecords.length} records`);
+        }
+
+        if (filteredRecords.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "No attendance records found for the specified criteria"
+            });
+        }
+
+        // Step 5: Sort by date (newest first), then by time (newest first)
+        filteredRecords.sort((a, b) => {
+            if (a.date !== b.date) {
+                return b.date.localeCompare(a.date);
+            }
+            return b.time.localeCompare(a.time);
+        });
+
+        // Step 6: Apply limit
+        const limitedRecords = filteredRecords.slice(0, validLimit);
+
+        // Step 7: Calculate summary statistics
+        const summary = {
+            totalEmployees: matchingEmployees.length,
+            totalRecords: filteredRecords.length,
+            checkInCount: filteredRecords.filter(r => r.type === 'checkin').length,
+            checkOutCount: filteredRecords.filter(r => r.type === 'checkout').length,
+            lateCount: filteredRecords.filter(r => r.status === 'late').length,
+            onTimeCount: filteredRecords.filter(r => r.status === 'on_time').length,
+            earlyCount: filteredRecords.filter(r => r.status === 'early').length
+        };
+
+        res.status(200).json({
+            success: true,
+            message: "Attendance records retrieved successfully",
+            count: limitedRecords.length,
+            totalRecords: filteredRecords.length,
+            summary: summary,
+            filters: {
+                name: name,
+                date: date || null,
+                year: year || null,
+                month: month || null,
+                limit: validLimit
+            },
+            data: limitedRecords
+        });
+        
+        console.log("Attendance search completed:", {
+            name,
+            date,
+            year,
+            month,
+            totalEmployees: matchingEmployees.length,
+            totalRecords: filteredRecords.length,
+            limitedRecords: limitedRecords.length
+        });
+        
+    } catch (error) {
+        console.error("Search attendance by name error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     checkInOut,
     getCheckInOutHistory,
@@ -1211,5 +1413,6 @@ module.exports = {
     getTodayAttendanceStatus,
     getAttendanceByEmployeeId,
     getMyAttendanceHistory,
-    searchEmployeeAttendance
+    searchEmployeeAttendance,
+    searchAttendanceByName
 };
