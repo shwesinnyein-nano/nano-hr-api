@@ -452,6 +452,29 @@ const createLeaveRequest = async (req, res) => {
             const timeDiff = end.getTime() - start.getTime();
             totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
         }
+        
+        // Calculate total days for hourly leave based on hours
+        if (requestType === 'hourly') {
+            if (startTime && endTime) {
+                // Helper function to convert time string to minutes
+                const timeToMinutes = (timeString) => {
+                    const parts = timeString.split(':');
+                    const hours = parseInt(parts[0], 10);
+                    const minutes = parseInt(parts[1], 10);
+                    return hours * 60 + minutes;
+                };
+                
+                const startMinutes = timeToMinutes(startTime);
+                const endMinutes = timeToMinutes(endTime);
+                const hoursDiff = (endMinutes - startMinutes) / 60; // Convert to hours
+                
+                // Calculate days (assume 8 hours = 1 day)
+                // Round to 2 decimal places
+                totalDays = Math.round((hoursDiff / 8) * 100) / 100;
+                
+                console.log(`Hourly leave calculation: ${startTime} to ${endTime} = ${hoursDiff} hours = ${totalDays} days`);
+            }
+        }
 
         // Generate unique leave request ID and UUID v4
         const leaveRequestId = uuidv4();
@@ -615,7 +638,7 @@ const createLeaveRequest = async (req, res) => {
             leaveRequestData.workingShift = workingShift;
             leaveRequestData.startTime = startTime;
             leaveRequestData.endTime = endTime;
-            leaveRequestData.totalDays = 0; // Hourly leave doesn't count as full days
+            leaveRequestData.totalDays = totalDays; // Hours converted to days (8 hours = 1 day)
         }
 
         // Save to Firestore using custom document ID
@@ -1716,7 +1739,8 @@ const getEmployeeLeaveBalance = async (req, res) => {
             
             // Filter by year if date is available
             if (requestDate && requestDate.startsWith(filterYear.toString())) {
-                const daysUsed = request.totalDays || 0.5; // Hourly leave = 0.5 days minimum
+                // Use the actual totalDays value (calculated properly for both daily and hourly)
+                const daysUsed = request.totalDays || 0;
                 
                 if (!usedDaysMap[leaveTypeId]) {
                     usedDaysMap[leaveTypeId] = 0;
