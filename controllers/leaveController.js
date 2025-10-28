@@ -453,7 +453,8 @@ const createLeaveRequest = async (req, res) => {
             totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // +1 to include both start and end dates
         }
         
-        // Calculate total days for hourly leave based on hours
+        // Calculate total hours and days for hourly leave
+        let totalHours = 0;
         if (requestType === 'hourly') {
             if (startTime && endTime) {
                 // Helper function to convert time string to minutes
@@ -466,13 +467,13 @@ const createLeaveRequest = async (req, res) => {
                 
                 const startMinutes = timeToMinutes(startTime);
                 const endMinutes = timeToMinutes(endTime);
-                const hoursDiff = (endMinutes - startMinutes) / 60; // Convert to hours
+                totalHours = (endMinutes - startMinutes) / 60; // Total hours
                 
                 // Calculate days (assume 8 hours = 1 day)
                 // Round to 2 decimal places
-                totalDays = Math.round((hoursDiff / 8) * 100) / 100;
+                totalDays = Math.round((totalHours / 8) * 100) / 100;
                 
-                console.log(`Hourly leave calculation: ${startTime} to ${endTime} = ${hoursDiff} hours = ${totalDays} days`);
+                console.log(`Hourly leave calculation: ${startTime} to ${endTime} = ${totalHours} hours = ${totalDays} days`);
             }
         }
 
@@ -638,6 +639,7 @@ const createLeaveRequest = async (req, res) => {
             leaveRequestData.workingShift = workingShift;
             leaveRequestData.startTime = startTime;
             leaveRequestData.endTime = endTime;
+            leaveRequestData.totalHours = totalHours; // Total hours taken
             leaveRequestData.totalDays = totalDays; // Hours converted to days (8 hours = 1 day)
         }
 
