@@ -1720,7 +1720,8 @@ const getEmployeeLeaveBalance = async (req, res) => {
             if (!setting.gender || setting.gender === "All" || setting.gender === employeeGender) {
                 leaveTypes.push({
                     leaveTypeId: doc.id,
-                    leaveTypeName: setting.leaveTypeName || setting.leave || setting.title || setting.leaveTypeNameEng || setting.titleEng,
+                    leaveTypeName: setting.leaveTypeName,
+                    leaveTypeEng: setting.leaveTypeNameEng,
                     maxDays: setting.leaveDay || 0,
                     isPaid: setting.type === 'Paid' || setting.isPaid === true,
                     isActive: setting.isActive !== false
@@ -1763,6 +1764,7 @@ const getEmployeeLeaveBalance = async (req, res) => {
             return {
                 leaveTypeId: leaveType.leaveTypeId,
                 leaveTypeName: leaveType.leaveTypeName,
+                leaveTypeEng: leaveType.leaveTypeEng || leaveType.leaveTypeName,
                 totalAllocated: leaveType.maxDays,
                 used: used,
                 remaining: remaining > 0 ? remaining : 0,
