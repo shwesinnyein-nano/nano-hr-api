@@ -188,13 +188,13 @@ const getLeaveSettings = async (req, res) => {
             leaveSettings.push({
                 id: doc.id,
                 uid: leaveSettingData.uid,
-                leaveType: leaveSettingData.title,
-                leaveTypeEng: leaveSettingData.titleEng,
+                leaveType: leaveSettingData.leaveTypeName || leaveSettingData.leave || leaveSettingData.title,
+                leaveTypeEng: leaveSettingData.leaveTypeNameEng || leaveSettingData.titleEng,
                 maxDays: leaveSettingData.leaveDay,
-                isPaid: leaveSettingData.isPaid,
+                isPaid: leaveSettingData.type === 'Paid' || leaveSettingData.isPaid === true,
                 gender: leaveSettingData.gender,
                 description: leaveSettingData.description,
-                isActive: leaveSettingData.isActive,
+                isActive: leaveSettingData.isActive !== false,
                 createdAt: leaveSettingData.createdDate,
                 updatedAt: leaveSettingData.updatedDate
             });
@@ -1720,9 +1720,9 @@ const getEmployeeLeaveBalance = async (req, res) => {
             if (!setting.gender || setting.gender === "All" || setting.gender === employeeGender) {
                 leaveTypes.push({
                     leaveTypeId: doc.id,
-                    leaveTypeName: setting.title || setting.titleEng,
+                    leaveTypeName: setting.leaveTypeName || setting.leave || setting.title || setting.leaveTypeNameEng || setting.titleEng,
                     maxDays: setting.leaveDay || 0,
-                    isPaid: setting.isPaid || false,
+                    isPaid: setting.type === 'Paid' || setting.isPaid === true,
                     isActive: setting.isActive !== false
                 });
             }
