@@ -470,11 +470,22 @@ const createLeaveRequest = async (req, res) => {
                 const endMinutes = timeToMinutes(endTime);
                 totalHours = (endMinutes - startMinutes) / 60; // Total hours
                 
-                // Calculate days (assume 8 hours = 1 day)
-                // Round to 2 decimal places
-                totalDays = Math.round((totalHours / 8) * 100) / 100;
+                // Determine hours per day based on position
+                let hoursPerDay = 9; // Default: 9 hours = 1 day for others
                 
-                console.log(`Hourly leave calculation: ${startTime} to ${endTime} = ${totalHours} hours = ${totalDays} days`);
+                if (positionName === "Programmer") {
+                    hoursPerDay = 10; // Programmer: 10 hours = 1 day
+                } else if (positionName === "Salesman" || positionName === "Manager") {
+                    hoursPerDay = 8; // Salesman and Manager: 8 hours = 1 day
+                } else {
+                    hoursPerDay = 9; // Others: 9 hours = 1 day
+                }
+                
+                // Calculate days based on position-specific hours
+                // Round to 2 decimal places
+                totalDays = Math.round((totalHours / hoursPerDay) * 100) / 100;
+                
+                console.log(`Hourly leave calculation for ${positionName}: ${startTime} to ${endTime} = ${totalHours} hours = ${totalDays} days (${hoursPerDay} hours/day)`);
             }
         }
 
