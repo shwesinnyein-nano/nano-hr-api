@@ -1681,6 +1681,18 @@ const getEmployeeLeaveBalance = async (req, res) => {
 
         const employeeData = employeeQuery.docs[0].data();
         const employeeGender = employeeData.gender;
+        const positionName = employeeData.positionName || "";
+        
+        // Determine hours per day based on position (same logic as in createLeaveRequest)
+        let hoursPerDay = 9; // Default: 9 hours = 1 day for others
+        
+        if (positionName === "Programmer") {
+            hoursPerDay = 10; // Programmer: 10 hours = 1 day
+        } else if (positionName === "Salesman" || positionName === "Manager") {
+            hoursPerDay = 8; // Salesman and Manager: 8 hours = 1 day
+        } else {
+            hoursPerDay = 9; // Others: 9 hours = 1 day
+        }
         
         // Check eligibility (3+ months with company)
         const joinDate = new Date(employeeData.joinDate);
@@ -1771,6 +1783,33 @@ const getEmployeeLeaveBalance = async (req, res) => {
         const balances = leaveTypes.map(leaveType => {
             const used = usedDaysMap[leaveType.leaveTypeId] || 0;
             const remaining = leaveType.maxDays - used;
+            const remainingDays = remaining > 0 ? remaining : 0;
+            
+            // Calculate remaining hours based on position
+            const remainingHours = Math.round(remainingDays * hoursPerDay * 100) / 100; // Round to 2 decimal places
+            
+            // Format as "X days Y hours" (e.g., "3 days 8 hours")
+            let remainingDaysHours = "";
+            if (remainingDays >= 1) {
+                const fullDays = Math.floor(remainingDays);
+                const hoursInPartialDay = (remainingDays - fullDays) * hoursPerDay;
+                
+                if (hoursInPartialDay >= 1) {
+                    const fullHours = Math.floor(hoursInPartialDay);
+                    remainingDaysHours = `${fullDays} days ${fullHours} hours`;
+                } else {
+                    remainingDaysHours = `${fullDays} days`;
+                }
+            } else if (remainingDays > 0) {
+                const hoursOnly = Math.floor(remainingHours);
+                if (hoursOnly > 0) {
+                    remainingDaysHours = `${hoursOnly} hours`;
+                } else {
+                    remainingDaysHours = "0 hours";
+                }
+            } else {
+                remainingDaysHours = "0 days";
+            }
             
             return {
                 leaveTypeId: leaveType.leaveTypeId,
@@ -1778,7 +1817,9 @@ const getEmployeeLeaveBalance = async (req, res) => {
                 leaveTypeEng: leaveType.leaveTypeEng || leaveType.leaveTypeName,
                 totalAllocated: leaveType.maxDays,
                 used: used,
-                remaining: remaining > 0 ? remaining : 0,
+                remaining: remainingDays,
+                remainingHours: remainingHours,
+                remainingDaysHours: remainingDaysHours,
                 isPaid: leaveType.isPaid,
                 isActive: leaveType.isActive,
                 percentageUsed: leaveType.maxDays > 0 ? Math.round((used / leaveType.maxDays) * 100) : 0
@@ -1793,12 +1834,14 @@ const getEmployeeLeaveBalance = async (req, res) => {
             year: filterYear,
             eligible: true,
             monthsWithCompany: monthsWithCompany,
+            hoursPerDay: hoursPerDay, // For reference: hours = 1 day for this position
             balances: balances,
             summary: {
                 totalLeaveTypes: balances.length,
-                totalDaysAllocated: balances.reduce((sum, b) => sum + b.totalAllocated, 0),
+                totalDaysAllocated: balances.reduce((sum, b) => sum + (parseFloat(b.totalAllocated) || 0), 0),
                 totalDaysUsed: balances.reduce((sum, b) => sum + b.used, 0),
-                totalDaysRemaining: balances.reduce((sum, b) => sum + b.remaining, 0)
+                totalDaysRemaining: balances.reduce((sum, b) => sum + b.remaining, 0),
+                totalRemainingHours: Math.round(balances.reduce((sum, b) => sum + b.remainingHours, 0) * 100) / 100
             }
         });
 
