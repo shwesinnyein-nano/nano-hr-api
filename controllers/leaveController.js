@@ -489,6 +489,86 @@ const createLeaveRequest = async (req, res) => {
             }
         }
 
+        // Validate against remaining balance before creating
+        try {
+            // Determine hoursPerDay for this employee (reuse logic)
+            let hoursPerDayForValidation = 9;
+            if (positionName === "Programmer") {
+                hoursPerDayForValidation = 10;
+            } else if (positionName === "Salesman" || positionName === "Manager") {
+                hoursPerDayForValidation = 8;
+            }
+
+            // Figure out request year for balance scope
+            const requestYear = (requestType === 'hourly'
+                ? (date || requestDate || new Date().toISOString().slice(0, 10))
+                : (fromDate || requestDate || new Date().toISOString().slice(0, 10))
+            ).slice(0, 4);
+
+            // Load leave type quota
+            const leaveSettingSnap = await db.collection("leave-settings").doc(leaveType).get();
+            const maxDays = leaveSettingSnap.exists ? (leaveSettingSnap.data().leaveDay || 0) : 0;
+
+            // Sum approved used days for this employee, leaveType, and year
+            const approvedSnap = await db.collection("employee-leave")
+                .where("employeeId", "==", employeeId)
+                .where("leaveType", "==", leaveType)
+                .where("status", "==", "approved")
+                .get();
+
+            let usedDays = 0;
+            approvedSnap.forEach(doc => {
+                const r = doc.data();
+                const rDate = r.fromDate || r.date || r.requestDate || '';
+                if (typeof rDate === 'string' && rDate.startsWith(requestYear)) {
+                    usedDays += (r.totalDays || 0);
+                }
+            });
+
+            const remainingDays = Math.max(0, (parseFloat(maxDays) || 0) - usedDays);
+            const remainingHours = Math.round(remainingDays * hoursPerDayForValidation * 100) / 100;
+
+            if (requestType === 'daily') {
+                const requestedDays = totalDays;
+                if (requestedDays > remainingDays) {
+                    return res.status(400).json({
+                        success: false,
+                        code: "INSUFFICIENT_BALANCE",
+                        message: `Requested ${requestedDays} days exceeds remaining ${remainingDays} days`,
+                        positionName,
+                        hoursPerDay: hoursPerDayForValidation,
+                        requestedDays,
+                        remainingDays,
+                        remainingHours,
+                        canSplit: remainingDays > 0,
+                        suggestedDays: remainingDays
+                    });
+                }
+            } else if (requestType === 'hourly') {
+                const requestedHours = Math.round(totalHours * 100) / 100;
+                if (requestedHours > remainingHours) {
+                    return res.status(400).json({
+                        success: false,
+                        code: "INSUFFICIENT_BALANCE",
+                        message: `Requested ${requestedHours} hours exceeds remaining ${remainingHours} hours`,
+                        positionName,
+                        hoursPerDay: hoursPerDayForValidation,
+                        requestedHours,
+                        requestedDays: totalDays,
+                        remainingDays,
+                        remainingHours,
+                        canSplit: remainingHours > 0,
+                        suggestedHours: remainingHours,
+                        suggestedDays: remainingDays
+                    });
+                }
+            }
+        } catch (balanceErr) {
+            console.error("⚠️ Balance validation failed (continuing as safe default):", balanceErr);
+            // If balance check fails, continue to create request to avoid blocking usage,
+            // approvers can still reject. Optionally, you can return 500 here instead.
+        }
+
         // Generate unique leave request ID and UUID v4
         const leaveRequestId = uuidv4();
 
