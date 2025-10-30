@@ -489,6 +489,9 @@ const createLeaveRequest = async (req, res) => {
             }
         }
 
+        // Log basic incoming request summary
+        console.log(`📝 Create leave request: employeeId=${employeeId}, name=${employeeName}, type=${requestType}, leaveType=${leaveTypeName} (${leaveType}), position=${positionName}, dates=${fromDate || date || ''}~${toDate || ''}, times=${startTime || ''}-${endTime || ''}`);
+
         // Validate against remaining balance before creating
         try {
             // Determine hoursPerDay for this employee (reuse logic)
@@ -531,6 +534,7 @@ const createLeaveRequest = async (req, res) => {
             if (requestType === 'daily') {
                 const requestedDays = totalDays;
                 if (requestedDays > remainingDays) {
+                    console.warn(`⚠️ INSUFFICIENT_BALANCE (daily): requestedDays=${requestedDays}, remainingDays=${remainingDays}, hoursPerDay=${hoursPerDayForValidation}, employeeId=${employeeId}, leaveType=${leaveType}`);
                     return res.status(400).json({
                         success: false,
                         code: "INSUFFICIENT_BALANCE",
@@ -547,6 +551,7 @@ const createLeaveRequest = async (req, res) => {
             } else if (requestType === 'hourly') {
                 const requestedHours = Math.round(totalHours * 100) / 100;
                 if (requestedHours > remainingHours) {
+                    console.warn(`⚠️ INSUFFICIENT_BALANCE (hourly): requestedHours=${requestedHours}, remainingHours=${remainingHours}, requestedDays=${totalDays}, hoursPerDay=${hoursPerDayForValidation}, employeeId=${employeeId}, leaveType=${leaveType}`);
                     return res.status(400).json({
                         success: false,
                         code: "INSUFFICIENT_BALANCE",
@@ -867,6 +872,8 @@ const createLeaveRequest = async (req, res) => {
             }
         } else {
         }
+
+        console.log(`✅ Leave request created: id=${savedLeaveRequest.id}, employeeId=${savedLeaveRequest.employeeId}, type=${savedLeaveRequest.requestType}, totalDays=${savedLeaveRequest.totalDays}, totalHours=${savedLeaveRequest.totalHours || 0}`);
 
         res.json({
             success: true,
