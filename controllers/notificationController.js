@@ -1,5 +1,6 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
+const { FieldValue } = require('firebase-admin/firestore');
 
 // Simplified notification service - Leave requests only
 const NOTIFICATION_TYPES = {
@@ -524,3 +525,129 @@ module.exports = {
     NOTIFICATION_TYPES,
     NOTIFICATION_CHANNELS
 };
+
+// Helper: find employee doc by docId or by uid field
+const findEmployeeDocRef = async (employeeId) => {
+    // Try direct doc id first
+    let docRef = db.collection('employees').doc(employeeId);
+    const byId = await docRef.get();
+    if (byId.exists) return docRef;
+
+    // Fallback: query by uid
+    const snap = await db.collection('employees').where('uid', '==', employeeId).limit(1).get();
+    if (!snap.empty) {
+        return db.collection('employees').doc(snap.docs[0].id);
+    }
+    return null;
+};
+
+// POST /notifications/devices/register
+const registerDevice = async (req, res) => {
+    try {
+        const { employeeId, token, platform, appVersion } = req.body || {};
+        if (!employeeId || !token) {
+            return res.status(400).json({ success: false, message: 'employeeId and token are required' });
+        }
+        const empRef = await findEmployeeDocRef(employeeId);
+        if (!empRef) {
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+
+        await empRef.set({
+            deviceTokens: FieldValue.arrayUnion(token),
+            devices: FieldValue.arrayUnion({ token, platform: platform || 'unknown', appVersion: appVersion || '', registeredAt: new Date().toISOString() })
+        }, { merge: true });
+
+        return res.json({ success: true, message: 'Device registered' });
+    } catch (err) {
+        console.error('❌ registerDevice error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
+    }
+};
+
+// DELETE /notifications/devices/:token (employeeId in query/body optional)
+const unregisterDevice = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { employeeId } = req.query;
+        if (!token) return res.status(400).json({ success: false, message: 'token is required' });
+
+        let empRef = null;
+        if (employeeId) {
+            empRef = await findEmployeeDocRef(employeeId);
+        } else {
+            // Best-effort search by token
+            const snap = await db.collection('employees').where('deviceTokens', 'array-contains', token).limit(1).get();
+            if (!snap.empty) empRef = db.collection('employees').doc(snap.docs[0].id);
+        }
+        if (!empRef) return res.status(404).json({ success: false, message: 'Employee not found for token' });
+
+        await empRef.set({
+            deviceTokens: FieldValue.arrayRemove(token)
+        }, { merge: true });
+
+        return res.json({ success: true, message: 'Device unregistered' });
+    } catch (err) {
+        console.error('❌ unregisterDevice error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
+    }
+};
+
+// GET /notifications/unread-count/:employeeId
+const getUnreadCount = async (req, res) => {
+    try {
+        const { employeeId } = req.params;
+        if (!employeeId) return res.status(400).json({ success: false, message: 'employeeId is required' });
+        const snap = await db.collection('app_notifications')
+            .where('recipientId', '==', employeeId)
+            .where('isRead', '==', false)
+            .get();
+        return res.json({ success: true, unread: snap.size });
+    } catch (err) {
+        console.error('❌ getUnreadCount error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
+    }
+};
+
+// POST /notifications/read-all { employeeId }
+const markAllAsRead = async (req, res) => {
+    try {
+        const { employeeId } = req.body || {};
+        if (!employeeId) return res.status(400).json({ success: false, message: 'employeeId is required' });
+        const snap = await db.collection('app_notifications')
+            .where('recipientId', '==', employeeId)
+            .where('isRead', '==', false)
+            .get();
+        const batch = db.batch();
+        snap.forEach(doc => batch.update(doc.ref, { isRead: true, readAt: new Date().toISOString(), updatedAt: new Date().toISOString() }));
+        await batch.commit();
+        return res.json({ success: true, message: 'All notifications marked as read' });
+    } catch (err) {
+        console.error('❌ markAllAsRead error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
+    }
+};
+
+// POST /notifications/push/test { employeeId, title, body }
+const sendTestPush = async (req, res) => {
+    try {
+        const { employeeId, title, body } = req.body || {};
+        if (!employeeId || !title || !body) return res.status(400).json({ success: false, message: 'employeeId, title, body are required' });
+        const empRef = await findEmployeeDocRef(employeeId);
+        if (!empRef) return res.status(404).json({ success: false, message: 'Employee not found' });
+        const empDoc = await empRef.get();
+        const tokens = (empDoc.data().deviceTokens || []).filter(Boolean);
+        if (tokens.length === 0) return res.status(200).json({ success: true, message: 'No device tokens to send' });
+        const result = await sendPushNotification(tokens, title, body, { type: 'test' });
+        return res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('❌ sendTestPush error:', err);
+        return res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
+    }
+};
+
+module.exports.registerDevice = registerDevice;
+module.exports.unregisterDevice = unregisterDevice;
+module.exports.getUnreadCount = getUnreadCount;
+module.exports.markAllAsRead = markAllAsRead;
+module.exports.sendTestPush = sendTestPush;
