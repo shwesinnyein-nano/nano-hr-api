@@ -14,6 +14,19 @@ const NOTIFICATION_CHANNELS = {
     PUSH: 'push'
 };
 
+// Helpers to safely respond when used as an Express handler OR an internal function
+const safeJson = (res, payload) => {
+    if (res && typeof res.json === 'function') return res.json(payload);
+    return payload;
+};
+
+const safeStatusJson = (res, statusCode, payload) => {
+    if (res && typeof res.status === 'function' && typeof res.json === 'function') {
+        return res.status(statusCode).json(payload);
+    }
+    return payload;
+};
+
 // Create notification record in database
 const createNotificationRecord = async (notificationData) => {
     try {
@@ -134,7 +147,7 @@ const sendLeaveRequestNotification = async (req, res) => {
         } = req.body;
 
         if (!employeeId || !leaveType || !managerId) {
-            return res.status(400).json({
+            return safeStatusJson(res, 400, {
                 success: false,
                 message: "Employee ID, leave type, and manager ID are required"
             });
@@ -145,7 +158,7 @@ const sendLeaveRequestNotification = async (req, res) => {
         const employeeDoc = await employeeRef.get();
         
         if (!employeeDoc.exists) {
-            return res.status(404).json({
+            return safeStatusJson(res, 404, {
                 success: false,
                 message: "Employee not found"
             });
@@ -155,7 +168,7 @@ const sendLeaveRequestNotification = async (req, res) => {
         const managerData = await db.collection('employees').doc(managerId).get();
         
         if (!managerData.exists) {
-            return res.status(404).json({
+            return safeStatusJson(res, 404, {
                 success: false,
                 message: "Manager not found"
             });
@@ -213,16 +226,15 @@ const sendLeaveRequestNotification = async (req, res) => {
         // Note: Notifications are already created by individual channel handlers above
         // No need for additional createNotificationRecord to avoid duplicates
 
-        res.json({
+        return safeJson(res, {
             success: true,
             message: "Leave request notifications sent successfully (FREE channels only)",
-            results: results,
-            notificationId: notificationRecord.id
+            results: results
         });
 
     } catch (error) {
         console.error("❌ Error sending leave request notification:", error);
-        res.status(500).json({
+        return safeStatusJson(res, 500, {
             success: false,
             message: "Failed to send notifications",
             error: error.message
@@ -251,7 +263,7 @@ const sendLeaveStatusNotification = async (req, res) => {
         } = req.body;
 
         if (!employeeId || !status || !approvedBy) {
-            return res.status(400).json({
+            return safeStatusJson(res, 400, {
                 success: false,
                 message: "Employee ID, status, and approver ID are required"
             });
@@ -262,7 +274,7 @@ const sendLeaveStatusNotification = async (req, res) => {
         const employeeDoc = await employeeRef.get();
         
         if (!employeeDoc.exists) {
-            return res.status(404).json({
+            return safeStatusJson(res, 404, {
                 success: false,
                 message: "Employee not found"
             });
@@ -333,7 +345,7 @@ const sendLeaveStatusNotification = async (req, res) => {
         // Note: Notifications are already created by individual channel handlers above
         // No need for additional createNotificationRecord to avoid duplicates
 
-        res.json({
+        return safeJson(res, {
             success: true,
             message: `Leave ${status} notifications sent successfully (FREE channels only)`,
             results: results
@@ -341,7 +353,7 @@ const sendLeaveStatusNotification = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error sending leave status notification:", error);
-        res.status(500).json({
+        return safeStatusJson(res, 500, {
             success: false,
             message: "Failed to send notifications",
             error: error.message
