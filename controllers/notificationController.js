@@ -153,8 +153,11 @@ const sendLeaveRequestNotification = async (req, res) => {
             });
         }
 
-        // Get employee data
-        const employeeRef = db.collection('employees').doc(employeeId);
+        // Get employee data (by doc id or uid)
+        const employeeRef = await findEmployeeDocRef(employeeId);
+        if (!employeeRef) {
+            return safeStatusJson(res, 404, { success: false, message: "Employee not found" });
+        }
         const employeeDoc = await employeeRef.get();
         
         if (!employeeDoc.exists) {
@@ -165,16 +168,12 @@ const sendLeaveRequestNotification = async (req, res) => {
         }
 
         const employeeData = employeeDoc.data();
-        const managerData = await db.collection('employees').doc(managerId).get();
-        
-        if (!managerData.exists) {
-            return safeStatusJson(res, 404, {
-                success: false,
-                message: "Manager not found"
-            });
+        const managerRef = await findEmployeeDocRef(managerId);
+        if (!managerRef) {
+            return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
         }
-
-        const manager = managerData.data();
+        const managerSnap = await managerRef.get();
+        const manager = managerSnap.data();
 
         // Prepare notification content
         const title = `New Leave Request from ${employeeData.firstName} ${employeeData.lastName}`;
@@ -269,8 +268,11 @@ const sendLeaveStatusNotification = async (req, res) => {
             });
         }
 
-        // Get employee data
-        const employeeRef = db.collection('employees').doc(employeeId);
+        // Get employee data (by doc id or uid)
+        const employeeRef = await findEmployeeDocRef(employeeId);
+        if (!employeeRef) {
+            return safeStatusJson(res, 404, { success: false, message: "Employee not found" });
+        }
         const employeeDoc = await employeeRef.get();
         
         if (!employeeDoc.exists) {
@@ -293,7 +295,7 @@ const sendLeaveStatusNotification = async (req, res) => {
             try {
                 switch (channel) {
                     case NOTIFICATION_CHANNELS.PUSH:
-                        const deviceTokens = employeeData.deviceTokens || [];
+        const deviceTokens = employeeData.deviceTokens || [];
                         if (deviceTokens.length > 0) {
                             const pushResult = await sendPushNotification(deviceTokens, title, message, {
                                 type: status === 'approved' ? 'leave_approved' : 'leave_rejected',
