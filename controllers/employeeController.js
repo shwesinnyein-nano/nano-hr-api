@@ -1355,6 +1355,19 @@ const getEmployeeShiftByDate = async (req, res) => {
                 const positionName = employeeData.positionName;
                 
                 console.log(`⚠️ No employee-specific shift, trying position-based: positionName="${positionName}", dayOfWeek="${dayOfWeek}", date="${date}"`);
+                
+                // First, check if any shift-data exists for this position at all (for debugging)
+                const positionCheckQuery = shiftDataRef.where("positionName", "==", positionName);
+                const positionCheckSnapshot = await positionCheckQuery.get();
+                console.log(`🔍 Found ${positionCheckSnapshot.size} shift-data document(s) for positionName="${positionName}"`);
+                
+                if (positionCheckSnapshot.size > 0) {
+                    positionCheckSnapshot.forEach((doc, idx) => {
+                        const data = doc.data();
+                        console.log(`   Shift ${idx + 1}: workingDays=[${(data.workingDays || []).join(', ')}], shiftName="${data.shiftName || 'N/A'}"`);
+                    });
+                }
+                
                 shiftQuery = shiftDataRef
                     .where("positionName", "==", positionName)
                     .where("workingDays", "array-contains", dayOfWeek);
@@ -1369,6 +1382,11 @@ const getEmployeeShiftByDate = async (req, res) => {
                     };
                 } else {
                     console.log(`❌ No shift found for positionName="${positionName}" with workingDays containing "${dayOfWeek}"`);
+                    if (positionCheckSnapshot.size > 0) {
+                        console.log(`💡 Tip: Shift documents exist for this position but none have "${dayOfWeek}" in workingDays array`);
+                    } else {
+                        console.log(`💡 Tip: No shift-data documents exist for positionName="${positionName}" at all`);
+                    }
                 }
             }
         }
