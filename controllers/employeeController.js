@@ -1440,117 +1440,6 @@ const getEmployeeShiftByDate = async (req, res) => {
     }
 };
 
-// Create shift data for position or employee
-const createShiftData = async (req, res) => {
-    console.log("Create shift data called", req.body);
-    try {
-        const { 
-            positionName,      // For position-based shift (e.g., "Programmer", "Programmer (Team Lead)")
-            employeeId,        // For employee-specific shift (e.g., Salesman/Manager)
-            assignDate,        // Specific date assignment (format: "YYYY-MM-DD " with space)
-            workingDays,       // Array of days: ["monday", "tuesday", ...] for recurring shifts
-            startTime,         // e.g., "09:00"
-            endTime,           // e.g., "18:00"
-            shiftName,         // e.g., "Morning Shift"
-            shiftNameEN,       // e.g., "Morning Shift"
-            shiftId,           // Optional: shift ID reference
-            shiftUid           // Optional: shift UID reference
-        } = req.body;
-
-        // Validation
-        if (!startTime || !endTime || !shiftName) {
-            return res.status(400).json({
-                success: false,
-                message: "startTime, endTime, and shiftName are required"
-            });
-        }
-
-        // Must have either positionName (for position-based) OR employeeId (for employee-specific)
-        if (!positionName && !employeeId) {
-            return res.status(400).json({
-                success: false,
-                message: "Either positionName (for position-based shift) or employeeId (for employee-specific shift) is required"
-            });
-        }
-
-        // If employeeId provided, must have assignDate (Salesman/Manager style)
-        if (employeeId && !assignDate) {
-            return res.status(400).json({
-                success: false,
-                message: "assignDate is required when employeeId is provided"
-            });
-        }
-
-        // If positionName provided without employeeId, should have workingDays (Programmer/Others style)
-        if (positionName && !employeeId && !workingDays) {
-            return res.status(400).json({
-                success: false,
-                message: "workingDays array is required for position-based shifts"
-            });
-        }
-
-        // Generate shiftTime from startTime and endTime
-        const shiftTime = `${startTime} - ${endTime}`;
-
-        // Prepare shift data document
-        const shiftData = {
-            startTime: startTime,
-            endTime: endTime,
-            shiftName: shiftName,
-            shiftNameEN: shiftNameEN || shiftName,
-            shiftTime: shiftTime,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-
-        // Add optional fields
-        if (shiftId) shiftData.shiftId = shiftId;
-        if (shiftUid) shiftData.shiftUid = shiftUid;
-
-        // Add fields based on type
-        if (positionName) {
-            shiftData.positionName = positionName;
-            if (workingDays && Array.isArray(workingDays)) {
-                shiftData.workingDays = workingDays.map(day => day.toLowerCase());
-            }
-        }
-
-        if (employeeId) {
-            shiftData.employeeId = employeeId;
-            
-            // Format assignDate with space suffix (as expected by lookup logic)
-            const formattedDate = assignDate.trim();
-            shiftData.assignDate = formattedDate.endsWith(' ') ? formattedDate : formattedDate + ' ';
-            shiftData.createdDate = shiftData.assignDate; // Also store in createdDate for fallback lookup
-            shiftData.employeeName = ""; // Will be populated from employee data if needed
-        }
-
-        // Save to Firestore
-        const shiftDataRef = db.collection("shift-data");
-        const newShiftDoc = await shiftDataRef.add(shiftData);
-        const savedShiftData = await newShiftDoc.get();
-
-        console.log(`✅ Shift data created: ID=${newShiftDoc.id}, positionName=${positionName || 'N/A'}, employeeId=${employeeId || 'N/A'}`);
-
-        res.json({
-            success: true,
-            message: "Shift data created successfully",
-            shiftData: {
-                id: newShiftDoc.id,
-                ...savedShiftData.data()
-            }
-        });
-
-    } catch (error) {
-        console.error("❌ Error creating shift data:", error);
-        res.status(500).json({
-            success: false,
-            message: "Internal server error",
-            error: error.message
-        });
-    }
-};
-
 module.exports = {
     login,
     register,
@@ -1567,6 +1456,5 @@ module.exports = {
     getEmployeeListInternal,
     getEmployeeWithShiftData,
     getShiftDataWithFilter,
-    getEmployeeShiftByDate,
-    createShiftData
+    getEmployeeShiftByDate
 };
