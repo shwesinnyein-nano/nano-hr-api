@@ -1321,6 +1321,7 @@ const getEmployeeShiftByDate = async (req, res) => {
         let shiftData = null;
         
         // Try to find shift with employeeId and assignDate
+        console.log(`🔍 Looking for shift: employeeId=${employeeId}, assignDate="${date + " "}"`);
         let shiftQuery = shiftDataRef
             .where("employeeId", "==", employeeId)
             .where("assignDate", "==", date + " ");
@@ -1328,11 +1329,13 @@ const getEmployeeShiftByDate = async (req, res) => {
         let shiftSnapshot = await shiftQuery.limit(1).get();
         
         if (!shiftSnapshot.empty) {
+            console.log(`✅ Found employee-specific shift by assignDate`);
             shiftData = {
                 id: shiftSnapshot.docs[0].id,
                 ...shiftSnapshot.docs[0].data()
             };
         } else {
+            console.log(`⚠️ No shift found by assignDate, trying createdDate`);
             // Try with createdDate if assignDate doesn't exist
             shiftQuery = shiftDataRef
                 .where("employeeId", "==", employeeId)
@@ -1341,6 +1344,7 @@ const getEmployeeShiftByDate = async (req, res) => {
             shiftSnapshot = await shiftQuery.limit(1).get();
             
             if (!shiftSnapshot.empty) {
+                console.log(`✅ Found employee-specific shift by createdDate`);
                 shiftData = {
                     id: shiftSnapshot.docs[0].id,
                     ...shiftSnapshot.docs[0].data()
@@ -1350,6 +1354,7 @@ const getEmployeeShiftByDate = async (req, res) => {
                 const dayOfWeek = getDayOfWeek(date);
                 const positionName = employeeData.positionName;
                 
+                console.log(`⚠️ No employee-specific shift, trying position-based: positionName="${positionName}", dayOfWeek="${dayOfWeek}", date="${date}"`);
                 shiftQuery = shiftDataRef
                     .where("positionName", "==", positionName)
                     .where("workingDays", "array-contains", dayOfWeek);
@@ -1357,10 +1362,13 @@ const getEmployeeShiftByDate = async (req, res) => {
                 shiftSnapshot = await shiftQuery.limit(1).get();
                 
                 if (!shiftSnapshot.empty) {
+                    console.log(`✅ Found position-based shift`);
                     shiftData = {
                         id: shiftSnapshot.docs[0].id,
                         ...shiftSnapshot.docs[0].data()
                     };
+                } else {
+                    console.log(`❌ No shift found for positionName="${positionName}" with workingDays containing "${dayOfWeek}"`);
                 }
             }
         }
