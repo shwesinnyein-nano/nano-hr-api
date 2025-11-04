@@ -1223,9 +1223,11 @@ const getShiftDataWithFilter = async (req, res) => {
         let attendanceData = [];
         if (!attendanceSnapshot.empty) {
             attendanceSnapshot.forEach(doc => {
+                const attendance = doc.data();
                 attendanceData.push({
                     id: doc.id,
-                    ...doc.data()
+                    ...attendance,
+                    currentLocation: attendance.currentLocation || null // Include currentLocation field
                 });
             });
         }
