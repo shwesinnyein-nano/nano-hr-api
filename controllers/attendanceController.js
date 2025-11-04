@@ -202,6 +202,8 @@ const checkInOut = async (req, res) => {
             // Use checkInLocation from frontend, fallback to currentLocation, branchName, or branch
             const finalCurrentLocation = checkInLocation || currentLocation || branchName || branch || '';
             
+            console.log(`📝 Saving check-in with checkInLocation="${checkInLocation || 'null'}", currentLocation="${finalCurrentLocation}"`);
+            
             const checkRecord = {
                 id: uid,
                 uid: uid,
@@ -274,6 +276,8 @@ const checkInOut = async (req, res) => {
             if (existingData.type === 'checkin' && !existingData.checkOutAt) {
                 // Use checkOutLocation from frontend, fallback to currentLocation, branchName, branch, or existing value
                 const finalCurrentLocation = checkOutLocation || currentLocation || branchName || branch || existingData.currentLocation || '';
+                
+                console.log(`📝 Saving check-out with checkOutLocation="${checkOutLocation || 'null'}", currentLocation="${finalCurrentLocation}"`);
                 
                 // Update existing record with checkout
                 await existingRecord.ref.update({
