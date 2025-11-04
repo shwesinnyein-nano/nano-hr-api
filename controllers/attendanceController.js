@@ -172,7 +172,7 @@ const checkInOut = async (req, res) => {
                             lateMinutes = lateMinutesCalc;
                         } else {
                             // Check in before start time (early)
-                            status = 'early';
+                            status = 'on_time';
                             lateMinutes = 0;
                         }
                     } else {
@@ -196,6 +196,9 @@ const checkInOut = async (req, res) => {
 
             // Create new check-in record
             const uid = uuidV4();
+            // Set currentLocation from branchName (or branch if branchName not available)
+            const currentLocation = branchName || branch || '';
+            
             const checkRecord = {
                 id: uid,
                 uid: uid,
@@ -204,6 +207,7 @@ const checkInOut = async (req, res) => {
                 location: location,
                 branch: branch, 
                 branchName: branchName,
+                currentLocation: currentLocation, // Save branch name as currentLocation
                 type: 'checkin',
                 date: dateString,
                 time: localTimeString,
@@ -230,6 +234,7 @@ const checkInOut = async (req, res) => {
                     location: location,
                     branch: branch,
                     branchName: branchName,
+                    currentLocation: currentLocation,
                     type: 'checkin',
                     date: dateString,
                     checkInAt: localTimeString,
@@ -262,11 +267,15 @@ const checkInOut = async (req, res) => {
 
             // Check if checked in (can check out)
             if (existingData.type === 'checkin' && !existingData.checkOutAt) {
+                // Set currentLocation from branchName (or branch if branchName not available)
+                const currentLocation = branchName || branch || existingData.currentLocation || '';
+                
                 // Update existing record with checkout
                 await existingRecord.ref.update({
                     type: 'checkout',
                     time: localTimeString,
                     checkOutAt: localTimeString,
+                    currentLocation: currentLocation, // Update currentLocation on checkout
                     updatedAt: thaiTime.toISOString()
                 });
 
@@ -280,6 +289,7 @@ const checkInOut = async (req, res) => {
                         location: location,
                         branch: branch,
                         branchName: branchName,
+                        currentLocation: currentLocation,
                         type: 'checkout',
                         date: dateString,
                         checkInAt: existingData.checkInAt,
