@@ -20,7 +20,9 @@ const checkInOut = async (req, res) => {
             location,
             branch,
             branchName,
-            currentLocation, // Accept from frontend
+            currentLocation, // Accept from frontend (legacy)
+            checkInLocation, // Accept from frontend for check-in
+            checkOutLocation, // Accept from frontend for check-out
             type
         } = req.body; // type: 'checkin' or 'checkout'
         
@@ -197,8 +199,8 @@ const checkInOut = async (req, res) => {
 
             // Create new check-in record
             const uid = uuidV4();
-            // Use currentLocation from frontend, fallback to branchName or branch
-            const finalCurrentLocation = currentLocation || branchName || branch || '';
+            // Use checkInLocation from frontend, fallback to currentLocation, branchName, or branch
+            const finalCurrentLocation = checkInLocation || currentLocation || branchName || branch || '';
             
             const checkRecord = {
                 id: uid,
@@ -268,8 +270,8 @@ const checkInOut = async (req, res) => {
 
             // Check if checked in (can check out)
             if (existingData.type === 'checkin' && !existingData.checkOutAt) {
-                // Use currentLocation from frontend, fallback to branchName, branch, or existing value
-                const finalCurrentLocation = currentLocation || branchName || branch || existingData.currentLocation || '';
+                // Use checkOutLocation from frontend, fallback to currentLocation, branchName, branch, or existing value
+                const finalCurrentLocation = checkOutLocation || currentLocation || branchName || branch || existingData.currentLocation || '';
                 
                 // Update existing record with checkout
                 await existingRecord.ref.update({
