@@ -211,6 +211,7 @@ const checkInOut = async (req, res) => {
                 branch: branch, 
                 branchName: branchName,
                 currentLocation: finalCurrentLocation, // Use from frontend or fallback
+                checkInLocation: checkInLocation || null, // Save checkInLocation as separate field
                 type: 'checkin',
                 date: dateString,
                 time: localTimeString,
@@ -238,6 +239,7 @@ const checkInOut = async (req, res) => {
                     branch: branch,
                     branchName: branchName,
                     currentLocation: finalCurrentLocation,
+                    checkInLocation: checkInLocation || null,
                     type: 'checkin',
                     date: dateString,
                     checkInAt: localTimeString,
@@ -279,6 +281,7 @@ const checkInOut = async (req, res) => {
                     time: localTimeString,
                     checkOutAt: localTimeString,
                     currentLocation: finalCurrentLocation, // Update currentLocation on checkout
+                    checkOutLocation: checkOutLocation || null, // Save checkOutLocation as separate field
                     updatedAt: thaiTime.toISOString()
                 });
 
@@ -293,6 +296,7 @@ const checkInOut = async (req, res) => {
                         branch: branch,
                         branchName: branchName,
                         currentLocation: finalCurrentLocation,
+                        checkOutLocation: checkOutLocation || null,
                         type: 'checkout',
                         date: dateString,
                         checkInAt: existingData.checkInAt,
