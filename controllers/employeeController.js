@@ -1208,13 +1208,44 @@ const getShiftDataWithFilter = async (req, res) => {
         const employeeDoc = employeeSnapshot.docs[0];
         const employeeData = employeeDoc.data();
 
+        // Helper function to calculate working hours from startTime and endTime
+        const calculateWorkingHours = (startTime, endTime) => {
+            if (!startTime || !endTime) return null;
+            
+            try {
+                const [startHours, startMinutes] = startTime.split(':').map(Number);
+                const [endHours, endMinutes] = endTime.split(':').map(Number);
+                
+                const startTotalMinutes = startHours * 60 + startMinutes;
+                const endTotalMinutes = endHours * 60 + endMinutes;
+                
+                const diffMinutes = endTotalMinutes - startTotalMinutes;
+                const hours = Math.floor(diffMinutes / 60);
+                const minutes = diffMinutes % 60;
+                
+                return {
+                    totalMinutes: diffMinutes,
+                    totalHours: Math.round((diffMinutes / 60) * 100) / 100, // 2 decimal places
+                    formatted: `${hours}h ${minutes}m`,
+                    hours: hours,
+                    minutes: minutes
+                };
+            } catch (error) {
+                return null;
+            }
+        };
+
         // Process shift data
         let shiftData = [];
         if (!shiftSnapshot.empty) {
             shiftSnapshot.forEach(doc => {
+                const shift = doc.data();
+                const workingHours = calculateWorkingHours(shift.startTime, shift.endTime);
+                
                 shiftData.push({
                     id: doc.id,
-                    ...doc.data()
+                    ...shift,
+                    workingHours: workingHours // Add calculated working hours
                 });
             });
         }
