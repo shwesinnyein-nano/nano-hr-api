@@ -1242,12 +1242,16 @@ const getShiftDataWithFilter = async (req, res) => {
                 const shift = doc.data();
                 const workingHours = calculateWorkingHours(shift.startTime, shift.endTime);
                 
+                console.log(`📊 Shift data: startTime="${shift.startTime}", endTime="${shift.endTime}", workingHours=`, workingHours);
+                
                 shiftData.push({
                     id: doc.id,
                     ...shift,
-                    workingHours: workingHours // Add calculated working hours
+                    workingHours: workingHours || null // Add calculated working hours (always include field)
                 });
             });
+        } else {
+            console.log(`⚠️ No shift data found for employeeId=${employeeId}, date=${trimmedDate}`);
         }
 
         // Process attendance data
