@@ -1169,6 +1169,7 @@ const getShiftDataWithFilter = async (req, res) => {
 
                 // For Salesman and Manager: filter by employeeId and assignDate
                 if (employeeData.positionName === "Salesman" || employeeData.positionName === "Manager") {
+                    console.log(`🔍 Looking for shift: employeeId=${employeeId}, position=Salesman/Manager, assignDate="${trimmedDate}"`);
                     shiftQuery = shiftQuery.where("employeeId", "==", employeeId);
                     
                     if (trimmedDate) {
@@ -1178,17 +1179,31 @@ const getShiftDataWithFilter = async (req, res) => {
                 }
                 // For other positions: filter by employee's positionName and workingDays
                 else {
+                    const dayOfWeek = trimmedDate ? getDayOfWeek(trimmedDate) : null;
+                    console.log(`🔍 Looking for shift: positionName="${employeeData.positionName}", dayOfWeek="${dayOfWeek}", date="${trimmedDate}"`);
+                    
                     shiftQuery = shiftQuery.where("positionName", "==", employeeData.positionName);
                     
-                    if (trimmedDate) {
-                        const dayOfWeek = getDayOfWeek(trimmedDate);
-                        if (dayOfWeek) {
-                            shiftQuery = shiftQuery.where("workingDays", "array-contains", dayOfWeek);
-                        }
+                    if (trimmedDate && dayOfWeek) {
+                        shiftQuery = shiftQuery.where("workingDays", "array-contains", dayOfWeek);
+                    }
+                    
+                    // Check if any shift documents exist for this position at all (for debugging)
+                    const positionCheckQuery = db.collection("shift-data").where("positionName", "==", employeeData.positionName);
+                    const positionCheckSnapshot = await positionCheckQuery.get();
+                    console.log(`📋 Found ${positionCheckSnapshot.size} shift-data document(s) for positionName="${employeeData.positionName}"`);
+                    
+                    if (positionCheckSnapshot.size > 0) {
+                        positionCheckSnapshot.forEach((doc, idx) => {
+                            const data = doc.data();
+                            console.log(`   Shift ${idx + 1}: workingDays=[${(data.workingDays || []).join(', ')}], startTime="${data.startTime}", endTime="${data.endTime}"`);
+                        });
                     }
                 }
                 
-                return await shiftQuery.get();
+                const result = await shiftQuery.get();
+                console.log(`📊 Shift query result: ${result.size} document(s) found`);
+                return result;
             })(),
             
             // Query 3: Get attendance data (only if date provided)
