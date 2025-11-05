@@ -1182,6 +1182,22 @@ const getShiftDataWithFilter = async (req, res) => {
                     const dayOfWeek = trimmedDate ? getDayOfWeek(trimmedDate) : null;
                     console.log(`🔍 Looking for shift: positionName="${employeeData.positionName}", dayOfWeek="${dayOfWeek}", date="${trimmedDate}"`);
                     
+                    // First, try to find employee-specific shift (by employeeId)
+                    let employeeShiftQuery = db.collection("shift-data").where("employeeId", "==", employeeId);
+                    if (trimmedDate) {
+                        const dateWithSpace = trimmedDate + " ";
+                        employeeShiftQuery = employeeShiftQuery.where("assignDate", "in", [trimmedDate, dateWithSpace]);
+                    }
+                    const employeeShiftSnapshot = await employeeShiftQuery.get();
+                    console.log(`🔍 Employee-specific shift query: ${employeeShiftSnapshot.size} document(s) found`);
+                    
+                    // If employee-specific shift found, use it
+                    if (!employeeShiftSnapshot.empty) {
+                        console.log(`✅ Found employee-specific shift`);
+                        return employeeShiftSnapshot;
+                    }
+                    
+                    // If no employee-specific shift, try position-based shift
                     shiftQuery = shiftQuery.where("positionName", "==", employeeData.positionName);
                     
                     if (trimmedDate && dayOfWeek) {
@@ -1196,7 +1212,7 @@ const getShiftDataWithFilter = async (req, res) => {
                     if (positionCheckSnapshot.size > 0) {
                         positionCheckSnapshot.forEach((doc, idx) => {
                             const data = doc.data();
-                            console.log(`   Shift ${idx + 1}: workingDays=[${(data.workingDays || []).join(', ')}], startTime="${data.startTime}", endTime="${data.endTime}"`);
+                            console.log(`   Shift ${idx + 1}: workingDays=[${(data.workingDays || []).join(', ')}], startTime="${data.startTime}", endTime="${data.endTime}", employeeId="${data.employeeId || 'N/A'}"`);
                         });
                     }
                 }
