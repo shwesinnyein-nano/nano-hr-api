@@ -51,7 +51,7 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
             }
         }
         
-        const fileName = `leave-attachments/${employeeId}/${leaveRequestId}/${Date.now()}_${file.originalname}`;
+        const fileName = `leave-attachments/${employeeId}/${leaveRequestId}/${file.originalname}`;
         const fileUpload = bucket.file(fileName);
         
         const stream = fileUpload.createWriteStream({
@@ -902,7 +902,8 @@ const createLeaveRequest = async (req, res) => {
                     date: savedLeaveRequest.date,
                     workingShift: savedLeaveRequest.workingShift,
                     startTime: savedLeaveRequest.startTime,
-                    endTime: savedLeaveRequest.endTime
+                    endTime: savedLeaveRequest.endTime,
+                    totalHours: savedLeaveRequest.totalHours || 0
                 })
             }
         });
