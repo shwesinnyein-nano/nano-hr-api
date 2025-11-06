@@ -51,14 +51,19 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
             }
         }
         
-        const fileName = `leave-attachments/${employeeId}/${leaveRequestId}/${file.originalname}`;
+        // Generate unique filename with timestamp to avoid conflicts
+        const timestamp = Date.now();
+        const fileExtension = file.originalname.split('.').pop() || '';
+        const baseName = file.originalname.replace(/\.[^/.]+$/, '') || 'file';
+        const uniqueFileName = `${baseName}_${timestamp}.${fileExtension}`;
+        const fileName = `leave-attachments/${employeeId}/${leaveRequestId}/${uniqueFileName}`;
         const fileUpload = bucket.file(fileName);
         
         const stream = fileUpload.createWriteStream({
             metadata: {
                 contentType: file.mimetype,
                 metadata: {
-                    originalName: file.originalname,
+                    originalName: file.originalname, // Save original name in metadata
                     uploadedBy: employeeId,
                     leaveRequestId: leaveRequestId,
                     uploadedAt: new Date().toISOString()
@@ -81,11 +86,13 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
                     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
                     
                     resolve({
-                        fileName: fileName,
-                        originalName: file.originalname,
+                        fileName: fileName, // Storage path with timestamp name
+                        storageName: uniqueFileName, // Timestamp name used in storage
+                        originalName: file.originalname, // Original filename for database
                         publicUrl: publicUrl,
                         size: file.size,
-                        contentType: file.mimetype
+                        contentType: file.mimetype,
+                        uploadedAt: new Date().toISOString()
                     });
                 } catch (error) {
                     console.error('❌ Error making file public:', error);
