@@ -70,8 +70,8 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             tokens: deviceTokens
         };
 
-        // Send using Firebase Admin SDK
-        const response = await admin.messaging().sendMulticast(message);
+        // Send using Firebase Admin SDK (v13+)
+        const response = await admin.messaging().sendEachForMulticast(message);
         
         console.log(`📲 Push Notification sent:`);
         console.log(`   Success Count: ${response.successCount}`);
