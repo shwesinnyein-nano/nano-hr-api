@@ -71,7 +71,7 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             data: data,
             tokens: deviceTokens
         };
-        console.log('📨 FCM tokens:', deviceTokens);
+        console.log('📨 FCM tokens: 1', deviceTokens);
         // Send using Firebase Admin SDK (v13+)
         const response = await admin.messaging().sendEachForMulticast(message);
         
@@ -99,13 +99,7 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
 
 // Create in-app notification
 const createInAppNotification = async (recipientId, title, message, type, data = {}) => {
-    console.log("🚀 Create in-app notification called");
-    console.log("📝 Notification data:", JSON.stringify(data, null, 2));
-    console.log("📝 Notification type:", type);
-    console.log("📝 Notification recipient:", recipientId);
-    console.log("📝 Notification sender:", data.employeeId || recipientId);
-    console.log("📝 Notification title:", title);
-    console.log("📝 Notification message:", message);
+   
     try {
         // Ensure all fields in the data object are defined
         const notificationData = {
@@ -172,6 +166,7 @@ const sendLeaveRequestNotification = async (req, res) => {
         }
 
         const employeeData = employeeDoc.data();
+        console.log('📨 managerId: 1', managerId);
         const managerRef = await findEmployeeDocRef(managerId);
         if (!managerRef) {
             return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
@@ -193,6 +188,13 @@ const sendLeaveRequestNotification = async (req, res) => {
         const message = messageOverride || defaultMessage;
 
         const results = [];
+        console.log('📨 title: 1', title);
+        console.log('📨 message: 1', message);
+        console.log('📨 channels: 1', channels);
+        console.log('📨 titleOverride: 1', titleOverride);
+        console.log('📨 messageOverride: 1', messageOverride);
+        console.log('📨 defaultTitle: 1', defaultTitle);
+        console.log('📨 manager: 1', manager);
 
         // Send notifications through FREE channels only
         for (const channel of channels) {
@@ -201,6 +203,7 @@ const sendLeaveRequestNotification = async (req, res) => {
                     case NOTIFICATION_CHANNELS.PUSH:
                         // Get device tokens from manager's profile
                         const deviceTokens = manager.deviceTokens || [];
+                        console.log('📨 deviceTokens: 1', deviceTokens);
                         if (deviceTokens.length > 0) {
                             const pushResult = await sendPushNotification(deviceTokens, title, message, {
                                 type: 'leave_request',
