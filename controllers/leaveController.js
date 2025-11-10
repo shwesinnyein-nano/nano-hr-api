@@ -941,38 +941,7 @@ const createLeaveRequest = async (req, res) => {
                         console.error(`❌ Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
                     });
 
-                    sendPushNotification({
-                        body: {
-                            employeeId: employeeId,
-                            leaveRequestId: leaveRequestId,
-                            leaveType: leaveTypeName,
-                            fromDate: notificationFromDate || notificationToDate,
-                            toDate: notificationToDate || notificationFromDate,
-                            reason: reason,
-                        }
-                    }, 
-                    {
-                        json: () => {}
-                    }).catch(notifError => {
-                        console.error(`❌ Failed to send push notification to ${firstApprover} ${approverId}:`, notifError);
-                    });
-                    sendInAppNotification({
-                        body: {
-                            employeeId: employeeId,
-                            leaveRequestId: leaveRequestId,
-                            leaveType: leaveTypeName,
-                            fromDate: notificationFromDate || notificationToDate,
-                            toDate: notificationToDate || notificationFromDate,
-                            reason: reason,
-                        }
-                    }, 
-                    {
-                        json: () => {}
-                    }).catch(notifError => {
-                        console.error(`❌ Failed to send in app notification to ${firstApprover} ${approverId}:`, notifError);
-                    });
-                    console.log('📨 sendPushNotification: 1', approverId);
-                    console.log('📨 sendInAppNotification: 1', approverId);
+                  
                 }
             } else {
             }
