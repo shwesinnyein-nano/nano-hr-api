@@ -60,6 +60,8 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             return { success: false, message: 'No device tokens provided' };
         }
 
+        console.log('📨 FCM tokens:', deviceTokens);
+
         // Prepare the message
         const message = {
             notification: {
