@@ -154,6 +154,7 @@ const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, 
 };
 
 const findApproverIdsByLevel = async (level, employeeId) => {
+    console.log('📨 findApproverIdsByLevel: 1', level, employeeId);
     const employeesRef = db.collection("employees");
     const ids = [];
     let branchCode = "001";
@@ -170,6 +171,7 @@ const findApproverIdsByLevel = async (level, employeeId) => {
 
     switch ((level || '').toLowerCase()) {
         case 'manager': {
+            console.log('📨 findApproverIdsByLevel: 2', level, employeeId);
             const managersWithManagedBranchesQuery = await employeesRef
                 .where("positionName", "==", "Manager")
                 .get();
@@ -191,6 +193,7 @@ const findApproverIdsByLevel = async (level, employeeId) => {
             break;
         }
         case 'team-lead': {
+            console.log('📨 findApproverIdsByLevel: 3', level, employeeId);
             const teamLeadQuery = await employeesRef
                 .where("positionName", "==", "Programmer (Team Lead)")
                 .get();
@@ -201,6 +204,7 @@ const findApproverIdsByLevel = async (level, employeeId) => {
             break;
         }
         case 'hr': {
+            console.log('📨 findApproverIdsByLevel: 4', level, employeeId);
             const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
             hrQuery.forEach(doc => {
                 const hrData = doc.data();
@@ -209,6 +213,7 @@ const findApproverIdsByLevel = async (level, employeeId) => {
             break;
         }
         case 'approver': {
+            console.log('📨 findApproverIdsByLevel: 5', level, employeeId);
             const approverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
             approverQuery.forEach(doc => {
                 const approverData = doc.data();
@@ -884,6 +889,7 @@ const createLeaveRequest = async (req, res) => {
                     toDate: notificationToDate
                 });
                 const approverIds = await findApproverIdsByLevel(firstApprover, employeeId);
+                console.log('📨 approverIds: 1', approverIds);
                 if (approverIds.length === 0) {
                     console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
                 }

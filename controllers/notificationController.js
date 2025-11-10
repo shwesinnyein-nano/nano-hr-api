@@ -129,7 +129,7 @@ const createInAppNotification = async (recipientId, title, message, type, data =
 
 // Send leave request notification (FREE channels only)
 const sendLeaveRequestNotification = async (req, res) => {
-    console.log("🚀 Send leave request notification called");
+    console.log("🚀 Send leave request notification called", req.body);
     try {
         const { 
             employeeId, 
@@ -198,6 +198,7 @@ const sendLeaveRequestNotification = async (req, res) => {
 
         // Send notifications through FREE channels only
         for (const channel of channels) {
+            console.log('📨 channel: 2', channel);
             try {
                 switch (channel) {
                     case NOTIFICATION_CHANNELS.PUSH:
