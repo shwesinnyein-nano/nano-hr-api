@@ -503,7 +503,7 @@ const createLeaveRequest = async (req, res) => {
     console.log('📨 createLeaveRequest: 1', req.body);
    
     try {
-        const { 
+        let { 
             employeeId, 
             employeeName,
             firstName,
@@ -528,7 +528,9 @@ const createLeaveRequest = async (req, res) => {
             reason, 
             attachment 
         } = req.body;
-        
+
+
+        console.log('📨 createLeaveRequest: 2', req.body);
         
         
         if (!employeeId || !leaveType || !leaveTypeName || !requestType || !reason) {
@@ -545,6 +547,24 @@ const createLeaveRequest = async (req, res) => {
                 missingFields: missingFields
             });
         }
+        let employerDoc = null;
+        console.log('📨 createLeaveRequest: 3', employeeName, firstName, lastName, positionName);
+        if (!employeeName || !firstName || !lastName || !positionName) {
+            console.log('📨 createLeaveRequest: 4', employeeName, firstName, lastName, positionName);
+          const snap = await db.collection('employees')
+            .where('uid', '==', employeeId)
+            .limit(1)
+            .get();
+          if (!snap.empty) {
+            employerDoc = snap.docs[0].data();
+            employeeName = employeeName || `${employerDoc.firstName || ''} ${employerDoc.lastName || ''}`.trim();
+            firstName = firstName || employerDoc.firstName || '';
+            lastName = lastName || employerDoc.lastName || '';
+            positionName = positionName || employerDoc.positionName || '';
+          }
+        }
+        console.log('📨 createLeaveRequest: 5', employerDoc);
+
 
         if (!['daily', 'hourly'].includes(requestType)) {
             return res.status(400).json({ 
@@ -743,17 +763,14 @@ const createLeaveRequest = async (req, res) => {
         
         // Fallback: Get employee data if company/location/branch not provided
         if (!finalCompany || !finalCompanyName || !finalLocation || !finalLocationName || !finalBranch || !finalBranchName) {
-        const employeesRef = db.collection("employees");
-        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
-        
-        if (!employeeQuery.empty) {
-            const employeeData = employeeQuery.docs[0].data();
-                finalCompany = finalCompany || employeeData.company || "NANO";
-                finalCompanyName = finalCompanyName || employeeData.companyName || "NANO Company";
-                finalLocation = finalLocation || employeeData.location || "BKK";
-                finalLocationName = finalLocationName || employeeData.locationName || "Bangkok";
-                finalBranch = finalBranch || employeeData.branch || "001";
-                finalBranchName = finalBranchName || employeeData.branchName || "Main Branch";
+        const doc = await loadEmployeeDoc();
+        if (doc) {
+            finalCompany = finalCompany || doc.company || "NANO";
+            finalCompanyName = finalCompanyName || doc.companyName || "NANO Company";
+            finalLocation = finalLocation || doc.location || "BKK";
+            finalLocationName = finalLocationName || doc.locationName || "Bangkok";
+            finalBranch = finalBranch || doc.branch || "001";
+            finalBranchName = finalBranchName || doc.branchName || "Main Branch";
             } else {
                 // Ultimate fallback
                 finalCompany = finalCompany || "NANO";
@@ -767,13 +784,10 @@ const createLeaveRequest = async (req, res) => {
         
 
         // Get employee data to check their role (for approver auto-approval)
-        const employeesRef = db.collection("employees");
-        const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
-        
         let employeeRole = null;
-        if (!employeeQuery.empty) {
-            const employeeData = employeeQuery.docs[0].data();
-            employeeRole = employeeData.role;
+        const docForRole = await loadEmployeeDoc();
+        if (docForRole) {
+            employeeRole = docForRole.role;
         }
         
         // Determine first approver based on requester's position/role

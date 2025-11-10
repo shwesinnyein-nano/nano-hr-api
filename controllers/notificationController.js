@@ -54,6 +54,7 @@ const createNotificationRecord = async (notificationData) => {
 
 // Send push notification
 const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+    console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
     try {
         if (!deviceTokens || deviceTokens.length === 0) {
             console.log('⚠️ No device tokens provided for push notification');
