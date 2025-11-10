@@ -500,6 +500,7 @@ const getEmployeeLeaveList = async (req, res) => {
 
 // Create leave request with file upload support
 const createLeaveRequest = async (req, res) => {
+    console.log('📨 createLeaveRequest: 1', req.body);
    
     try {
         const { 
@@ -620,9 +621,9 @@ const createLeaveRequest = async (req, res) => {
         // Log basic incoming request summary
         console.log(`📝 Create leave request: employeeId=${employeeId}, name=${employeeName}, type=${requestType}, leaveType=${leaveTypeName} (${leaveType}), position=${positionName}, dates=${fromDate || date || ''}~${toDate || ''}, times=${startTime || ''}-${endTime || ''}`);
 
-        // Validate against remaining balance before creating
+       
         try {
-            // Determine hoursPerDay for this employee (reuse logic)
+            
             let hoursPerDayForValidation = 9;
             if (positionName === "Programmer") {
                 hoursPerDayForValidation = 10;
@@ -791,7 +792,7 @@ const createLeaveRequest = async (req, res) => {
             initialStatusName = "Approved";
             console.log(`✅ Auto-approved (Approver role)`);
         } else if (positionName === "Manager") {
-            // Manager requests leave → Skip manager level, go to HR
+            
             firstApprover = "hr";
             console.log(`✅ Manager → HR`);
         } else if (positionName === "HR") {
