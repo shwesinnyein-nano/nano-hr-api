@@ -548,20 +548,27 @@ const createLeaveRequest = async (req, res) => {
             });
         }
         let employerDoc = null;
+        const loadEmployeeDoc = async () => {
+            if (employerDoc) return employerDoc;
+            const snap = await db.collection('employees')
+                .where('uid', '==', employeeId)
+                .limit(1)
+                .get();
+            if (!snap.empty) {
+                employerDoc = snap.docs[0].data();
+            }
+            return employerDoc;
+        };
         console.log('📨 createLeaveRequest: 3', employeeName, firstName, lastName, positionName);
         if (!employeeName || !firstName || !lastName || !positionName) {
             console.log('📨 createLeaveRequest: 4', employeeName, firstName, lastName, positionName);
-          const snap = await db.collection('employees')
-            .where('uid', '==', employeeId)
-            .limit(1)
-            .get();
-          if (!snap.empty) {
-            employerDoc = snap.docs[0].data();
-            employeeName = employeeName || `${employerDoc.firstName || ''} ${employerDoc.lastName || ''}`.trim();
-            firstName = firstName || employerDoc.firstName || '';
-            lastName = lastName || employerDoc.lastName || '';
-            positionName = positionName || employerDoc.positionName || '';
-          }
+            const doc = await loadEmployeeDoc();
+            if (doc) {
+                employeeName = employeeName || `${doc.firstName || ''} ${doc.lastName || ''}`.trim();
+                firstName = firstName || doc.firstName || '';
+                lastName = lastName || doc.lastName || '';
+                positionName = positionName || doc.positionName || '';
+            }
         }
         console.log('📨 createLeaveRequest: 5', employerDoc);
 
@@ -1078,6 +1085,7 @@ const getAllLeaveRequests = async (req, res) => {
     }
 };
 
+
 // Update leave request status (approve/reject)
 const updateLeaveRequestStatus = async (req, res) => {
     try {
@@ -1481,6 +1489,7 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
         });
     }
 };
+
 
 // Approve leave request (multi-level)
 const approveLeaveRequest = async (req, res) => {
