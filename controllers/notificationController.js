@@ -154,11 +154,13 @@ const sendLeaveRequestNotification = async (req, res) => {
 
         // Get employee data (by doc id or uid)
         const employeeRef = await findEmployeeDocRef(employeeId);
+        console.log('📨 employeeRef: 1', employeeRef);
         if (!employeeRef) {
             return safeStatusJson(res, 404, { success: false, message: "Employee not found" });
         }
         const employeeDoc = await employeeRef.get();
-        
+
+        console.log('📨 employeeDoc: 1', employeeDoc);
         if (!employeeDoc.exists) {
             return safeStatusJson(res, 404, {
                 success: false,
@@ -169,6 +171,7 @@ const sendLeaveRequestNotification = async (req, res) => {
         const employeeData = employeeDoc.data();
         console.log('📨 managerId: 1', managerId);
         const managerRef = await findEmployeeDocRef(managerId);
+        console.log('📨 managerRef: 1', managerRef);
         if (!managerRef) {
             return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
         }
@@ -198,47 +201,54 @@ const sendLeaveRequestNotification = async (req, res) => {
         console.log('📨 manager: 1', manager);
 
         // Send notifications through FREE channels only
-        for (const channel of channels) {
-            console.log('📨 channel: 2', channel);
-            try {
-                switch (channel) {
-                    case NOTIFICATION_CHANNELS.PUSH:
-                        // Get device tokens from manager's profile
-                        const deviceTokens = manager.deviceTokens || [];
-                        console.log('📨 deviceTokens: 1', deviceTokens);
-                        if (deviceTokens.length > 0) {
-                            const pushResult = await sendPushNotification(deviceTokens, title, message, {
-                                type: 'leave_request',
-                                employeeId: employeeId,
-                                leaveRequestId: leaveRequestId,
-                                leaveType: leaveType
-                            });
-                            results.push({ channel: 'push', ...pushResult });
-                        } else {
-                            results.push({ channel: 'push', success: false, message: 'No device tokens found' });
-                        }
-                        break;
+        // for (const channel of channels) {
+        //     console.log('📨 channel: 2', channel);
+        //     try {
+        //         switch (channel) {
+        //             case NOTIFICATION_CHANNELS.PUSH:
+        //                 // Get device tokens from manager's profile
+        //                 let deviceTokens = manager.deviceTokens || [];
+        //                 if ((!deviceTokens || deviceTokens.length === 0) && Array.isArray(manager.devices)) {
+        //                     deviceTokens = manager.devices
+        //                         .map(device => device && device.token)
+        //                         .filter(Boolean);
+        //                 }
+        //                 console.log('📨 deviceTokens: 1', deviceTokens);
+        //                 if (deviceTokens.length > 0) {
+        //                     const uniqueTokens = Array.from(new Set(deviceTokens));
+        //                     const pushResult = await sendPushNotification(uniqueTokens, title, message, {
+        //                         type: 'leave_request',
+        //                         employeeId: employeeId,
+        //                         leaveRequestId: leaveRequestId,
+        //                         leaveType: leaveType
+        //                     });
+        //                     results.push({ channel: 'push', ...pushResult });
+        //                 } else {
+        //                     console.warn(`⚠️ No device tokens found for approver ${managerId}`);
+        //                     results.push({ channel: 'push', success: false, message: 'No device tokens found' });
+        //                 }
+        //                 break;
 
-                    case NOTIFICATION_CHANNELS.IN_APP:
-                        const inAppResult = await createInAppNotification(
-                            managerId,
-                            title,
-                            message,
-                            NOTIFICATION_TYPES.LEAVE_REQUEST,
-                            { employeeId, leaveRequestId, leaveType, fromDate, toDate, reason }
-                        );
-                        results.push({ channel: 'in_app', notification: inAppResult });
-                        break;
-                }
-            } catch (channelError) {
-                console.error(`❌ Error sending ${channel} notification:`, channelError);
-                results.push({ 
-                    channel: channel, 
-                    success: false, 
-                    error: channelError.message 
-                });
-            }
-        }
+        //             case NOTIFICATION_CHANNELS.IN_APP:
+        //                 const inAppResult = await createInAppNotification(
+        //                     managerId,
+        //                     title,
+        //                     message,
+        //                     NOTIFICATION_TYPES.LEAVE_REQUEST,
+        //                     { employeeId, leaveRequestId, leaveType, fromDate, toDate, reason }
+        //                 );
+        //                 results.push({ channel: 'in_app', notification: inAppResult });
+        //                 break;
+        //         }
+        //     } catch (channelError) {
+        //         console.error(`❌ Error sending ${channel} notification:`, channelError);
+        //         results.push({ 
+        //             channel: channel, 
+        //             success: false, 
+        //             error: channelError.message 
+        //         });
+        //     }
+        // }
 
         // Note: Notifications are already created by individual channel handlers above
         // No need for additional createNotificationRecord to avoid duplicates
