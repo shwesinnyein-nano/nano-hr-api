@@ -71,7 +71,7 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             data: data,
             tokens: deviceTokens
         };
-
+        console.log('📨 FCM tokens:', deviceTokens);
         // Send using Firebase Admin SDK (v13+)
         const response = await admin.messaging().sendEachForMulticast(message);
         
