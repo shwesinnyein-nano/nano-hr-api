@@ -131,7 +131,7 @@ const createInAppNotification = async (recipientId, title, message, type, data =
 // Send leave request notification (FREE channels only)
 const sendLeaveRequestNotification = async (req, res) => {
     console.log("🚀 Send leave request notification called", req.body);
-    try {
+    // try {
         const { 
             employeeId, 
             leaveRequestId, // Add leave request ID
@@ -259,14 +259,14 @@ const sendLeaveRequestNotification = async (req, res) => {
             results: results
         });
 
-    } catch (error) {
-        console.error("❌ Error sending leave request notification:", error);
-        return safeStatusJson(res, 500, {
-            success: false,
-            message: "Failed to send notifications",
-            error: error.message
-        });
-    }
+    // } catch (error) {
+    //     console.error("❌ Error sending leave request notification:", error);
+    //     return safeStatusJson(res, 500, {
+    //         success: false,
+    //         message: "Failed to send notifications",
+    //         error: error.message
+    //     });
+    // }
 };
 
 // Send leave approval/rejection notification (FREE channels only)
