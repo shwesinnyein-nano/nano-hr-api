@@ -143,7 +143,9 @@ const sendLeaveRequestNotification = async (req, res) => {
             toDate, 
             reason, 
             managerId,
-            channels = ['in_app', 'push'] // Only free channels
+            channels = ['in_app', 'push'], // Only free channels
+            titleOverride,
+            messageOverride
         } = req.body;
 
         if (!employeeId || !leaveType || !managerId) {
@@ -176,8 +178,17 @@ const sendLeaveRequestNotification = async (req, res) => {
         const manager = managerSnap.data();
 
         // Prepare notification content
-        const title = `New Leave Request from ${employeeData.firstName} ${employeeData.lastName}`;
-        const message = `${employeeData.firstName} ${employeeData.lastName} has requested ${leaveType} leave from ${fromDate} to ${toDate}. Reason: ${reason}`;
+        const defaultTitle = `New Leave Request from ${employeeData.firstName} ${employeeData.lastName}`;
+        const dateRange = (() => {
+            if (fromDate && toDate) {
+                if (fromDate === toDate) return fromDate;
+                return `${fromDate} - ${toDate}`;
+            }
+            return fromDate || toDate || '';
+        })();
+        const defaultMessage = `${employeeData.firstName} ${employeeData.lastName} has requested ${leaveType} leave${dateRange ? ` (${dateRange})` : ''}.${reason ? ` Reason: ${reason}` : ''}`;
+        const title = titleOverride || defaultTitle;
+        const message = messageOverride || defaultMessage;
 
         const results = [];
 

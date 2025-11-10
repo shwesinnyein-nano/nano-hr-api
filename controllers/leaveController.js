@@ -108,6 +108,121 @@ const uploadFileToStorage = async (file, leaveRequestId, employeeId) => {
     }
 };
 
+const formatLeaveDateRange = (fromDate, toDate) => {
+    if (fromDate && toDate) {
+        if (fromDate === toDate) {
+            return fromDate;
+        }
+        return `${fromDate} - ${toDate}`;
+    }
+    return fromDate || toDate || '';
+};
+
+const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, fromDate, toDate }) => {
+    const safeEmployeeName = employeeName || 'An employee';
+    const safeLeaveType = leaveTypeName || 'leave';
+    const dateRange = formatLeaveDateRange(fromDate, toDate);
+    const rangeText = dateRange ? ` (${dateRange})` : '';
+
+    switch ((level || '').toLowerCase()) {
+        case 'team-lead':
+            return {
+                title: `Team Lead Approval Needed`,
+                message: `${safeEmployeeName} requested ${safeLeaveType}${rangeText}. Please review as team lead.`
+            };
+        case 'manager':
+            return {
+                title: `Manager Approval Needed`,
+                message: `${safeEmployeeName} submitted a ${safeLeaveType} request${rangeText}. Please approve or reject.`
+            };
+        case 'hr':
+            return {
+                title: `HR Review Required`,
+                message: `${safeEmployeeName}'s ${safeLeaveType} request${rangeText} is ready for HR review.`
+            };
+        case 'approver':
+            return {
+                title: `Final Approval Required`,
+                message: `${safeEmployeeName}'s ${safeLeaveType} request${rangeText} awaits final approval.`
+            };
+        default:
+            return {
+                title: `Leave Approval Needed`,
+                message: `${safeEmployeeName} submitted a ${safeLeaveType} request${rangeText}.`
+            };
+    }
+};
+
+const findApproverIdsByLevel = async (level, employeeId) => {
+    const employeesRef = db.collection("employees");
+    const ids = [];
+    let branchCode = "001";
+
+    try {
+        const employeeQuery = await employeesRef.where("uid", "==", employeeId).limit(1).get();
+        if (!employeeQuery.empty) {
+            const employeeData = employeeQuery.docs[0].data();
+            branchCode = employeeData.branch || branchCode;
+        }
+    } catch (error) {
+        console.error("❌ Error loading employee for approver lookup:", error);
+    }
+
+    switch ((level || '').toLowerCase()) {
+        case 'manager': {
+            const managersWithManagedBranchesQuery = await employeesRef
+                .where("positionName", "==", "Manager")
+                .get();
+            managersWithManagedBranchesQuery.forEach(doc => {
+                const managerData = doc.data();
+                if (Array.isArray(managerData.managedBranches) && managerData.managedBranches.includes(branchCode)) {
+                    ids.push(managerData.uid);
+                }
+            });
+
+            const sameBranchManagerQuery = await employeesRef
+                .where("branch", "==", branchCode)
+                .where("positionName", "==", "Manager")
+                .get();
+            sameBranchManagerQuery.forEach(doc => {
+                const managerData = doc.data();
+                ids.push(managerData.uid);
+            });
+            break;
+        }
+        case 'team-lead': {
+            const teamLeadQuery = await employeesRef
+                .where("positionName", "==", "Programmer (Team Lead)")
+                .get();
+            teamLeadQuery.forEach(doc => {
+                const teamLeadData = doc.data();
+                ids.push(teamLeadData.uid);
+            });
+            break;
+        }
+        case 'hr': {
+            const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
+            hrQuery.forEach(doc => {
+                const hrData = doc.data();
+                ids.push(hrData.uid);
+            });
+            break;
+        }
+        case 'approver': {
+            const approverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
+            approverQuery.forEach(doc => {
+                const approverData = doc.data();
+                ids.push(approverData.uid);
+            });
+            break;
+        }
+        default:
+            break;
+    }
+
+    return Array.from(new Set(ids)).filter(Boolean);
+};
+
 // Get leave settings list
 const getLeaveSettings = async (req, res) => {
     try {
@@ -437,7 +552,8 @@ const createLeaveRequest = async (req, res) => {
             if (!fromDate || !toDate) {
                 return res.status(400).json({ 
                     success: false,
-                    message: "From date and to date are required for daily leave" 
+                    message: "From date and to date are required for daily leave" ,
+                    messageTh: "วันที่เริ่มต้นและวันที่สิ้นสุดของการลาจำเป็น"
                 });
             }
         }
@@ -758,96 +874,19 @@ const createLeaveRequest = async (req, res) => {
         // Skip notification if auto-approved (firstApprover is null)
         if (firstApprover !== null) {
         try {
-                let approverIds = [];
-            
-            // Get employee data to find their manager
-            const employeesRef = db.collection("employees");
-            const employeeQuery = await employeesRef.where("uid", "==", employeeId).get();
-            
-            if (!employeeQuery.empty) {
-                const employeeData = employeeQuery.docs[0].data();
-                const branchCode = employeeData.branch || "001";
-                
-                // Route notification based on firstApprover
-                if (firstApprover === "manager") {
-                    // Find managers for this branch
-                
-                const managersWithManagedBranchesQuery = await employeesRef
-                    .where("positionName", "==", "Manager")
-                    .get();
-                
-                const managersWithManagedBranches = [];
-                managersWithManagedBranchesQuery.forEach(doc => {
-                    const managerData = doc.data();
-                    if (managerData.managedBranches && Array.isArray(managerData.managedBranches)) {
-                        if (managerData.managedBranches.includes(branchCode)) {
-                            managersWithManagedBranches.push({
-                                id: doc.id,
-                                uid: managerData.uid,
-                                firstName: managerData.firstName,
-                                    lastName: managerData.lastName
-                            });
-                        }
-                    }
+                const employeeDisplayName = employeeName || [firstName, lastName].filter(Boolean).join(' ').trim() || employeeId;
+                const notificationFromDate = requestType === 'hourly' ? (date || fromDate) : fromDate;
+                const notificationToDate = requestType === 'hourly' ? (date || toDate) : toDate;
+                const { title: approverTitle, message: approverMessage } = buildApproverNotificationContent(firstApprover, {
+                    employeeName: employeeDisplayName,
+                    leaveTypeName,
+                    fromDate: notificationFromDate,
+                    toDate: notificationToDate
                 });
-                
-                    // Fallback - find manager in same branch
-                const sameBranchManagerQuery = await employeesRef
-                    .where("branch", "==", branchCode)
-                    .where("positionName", "==", "Manager")
-                    .limit(1)
-                    .get();
-                    
-                const sameBranchManagers = [];
-                sameBranchManagerQuery.forEach(doc => {
-                    const managerData = doc.data();
-                    sameBranchManagers.push({
-                        id: doc.id,
-                            uid: managerData.uid
-                    });
-                });
-                
-                const allManagers = [...managersWithManagedBranches, ...sameBranchManagers];
-                const uniqueManagers = allManagers.filter((manager, index, self) => 
-                    index === self.findIndex(m => m.id === manager.id)
-                );
-                
-                    approverIds = uniqueManagers.map(manager => manager.uid);
-                    
-                } else if (firstApprover === "team-lead") {
-                    // Find Team Lead by positionName
-                    const teamLeadQuery = await employeesRef
-                        .where("positionName", "==", "Programmer (Team Lead)")
-                        .get();
-                    
-                    teamLeadQuery.forEach(doc => {
-                        const teamLeadData = doc.data();
-                        approverIds.push(teamLeadData.uid);
-                    });
-                    
-                } else if (firstApprover === "hr") {
-                    // Find HR personnel
-                    const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
-                    
-                    hrQuery.forEach(doc => {
-                        const hrData = doc.data();
-                        approverIds.push(hrData.uid);
-                    });
-                    
-                } else if (firstApprover === "approver") {
-                    // Find final approvers
-                    const approverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
-                    
-                    approverQuery.forEach(doc => {
-                        const approverData = doc.data();
-                        approverIds.push(approverData.uid);
-                    });
-                }
-                
+                const approverIds = await findApproverIdsByLevel(firstApprover, employeeId);
                 if (approverIds.length === 0) {
+                    console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
                 }
-            } else {
-            }
             
             // Send notifications to all found approvers
             if (approverIds.length > 0) {
@@ -858,12 +897,14 @@ const createLeaveRequest = async (req, res) => {
                             employeeId: employeeId,
                             leaveRequestId: leaveRequestId,
                             leaveType: leaveTypeName,
-                            fromDate: fromDate || date,
-                            toDate: toDate || date,
+                            fromDate: notificationFromDate || notificationToDate,
+                            toDate: notificationToDate || notificationFromDate,
                             reason: reason,
                             managerId: approverId,  // Keep field name for compatibility
                             approverLevel: firstApprover,  // Add which level this is
-                            channels: ['in_app', 'push']
+                            channels: ['in_app', 'push'],
+                            titleOverride: approverTitle,
+                            messageOverride: approverMessage
                         }
                     }, {
                         json: () => {}
@@ -1106,7 +1147,6 @@ const updateLeaveRequestStatus = async (req, res) => {
 
         // Send notification to employee about status change (async, don't wait for it)
         try {
-            
             sendLeaveStatusNotification({
                 body: {
                     employeeId: leaveData.employeeId,
@@ -1610,6 +1650,7 @@ const approveLeaveRequest = async (req, res) => {
                 const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
                 
                 if (!hrQuery.empty) {
+                    const hrNotification = buildApproverNotificationContent('hr', notificationBase);
                     hrQuery.forEach(hrDoc => {
                         const hrData = hrDoc.data();
                         
@@ -1631,6 +1672,26 @@ const approveLeaveRequest = async (req, res) => {
                             }
                         ).catch(hrNotifError => {
                             console.error(`❌ Failed to send HR notification:`, hrNotifError);
+                        });
+
+                        sendLeaveRequestNotification({
+                            body: {
+                                employeeId: leaveData.employeeId,
+                                leaveRequestId: leaveId,
+                                leaveType: leaveData.leaveTypeName,
+                                fromDate: notificationBase.fromDate,
+                                toDate: notificationBase.toDate,
+                                reason: comment || leaveData.reason,
+                                managerId: hrData.uid,
+                                approverLevel: 'hr',
+                                channels: ['push'],
+                                titleOverride: hrNotification.title,
+                                messageOverride: hrNotification.message
+                            }
+                        }, {
+                            json: () => {}
+                        }).catch(notifError => {
+                            console.error(`❌ Failed to send HR push notification:`, notifError);
                         });
                     });
                 } else {
@@ -1654,9 +1715,12 @@ const approveLeaveRequest = async (req, res) => {
                 const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
                 
                 if (!hrQuery.empty) {
+                    const hrNotification = buildApproverNotificationContent('hr', notificationBase);
                     hrQuery.forEach(hrDoc => {
                         const hrData = hrDoc.data();
-                        
+                    
+                        const messageTh = `${approverName} อนุมัติคำขอ ${leaveData.leaveTypeName} จากพนักงาน ${leaveData.employeeId}`;
+
                         // Create HR notification
                         createInAppNotification(
                             hrData.uid,
@@ -1675,6 +1739,26 @@ const approveLeaveRequest = async (req, res) => {
                             }
                         ).catch(hrNotifError => {
                             console.error(`❌ Failed to send HR notification:`, hrNotifError);
+                        });
+
+                        sendLeaveRequestNotification({
+                            body: {
+                                employeeId: leaveData.employeeId,
+                                leaveRequestId: leaveId,
+                                leaveType: leaveData.leaveTypeName,
+                                fromDate: notificationBase.fromDate,
+                                toDate: notificationBase.toDate,
+                                reason: comment || leaveData.reason,
+                                managerId: hrData.uid,
+                                approverLevel: 'hr',
+                                channels: ['push'],
+                                titleOverride: hrNotification.title,
+                                messageOverride: hrNotification.message
+                            }
+                        }, {
+                            json: () => {}
+                        }).catch(notifError => {
+                            console.error(`❌ Failed to send HR push notification:`, notifError);
                         });
                     });
                 } else {
@@ -1698,6 +1782,7 @@ const approveLeaveRequest = async (req, res) => {
                 const finalApproverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
                 
                 if (!finalApproverQuery.empty) {
+                    const approverNotification = buildApproverNotificationContent('approver', notificationBase);
                     finalApproverQuery.forEach(approverDoc => {
                         const approverData = approverDoc.data();
                         
@@ -1719,6 +1804,26 @@ const approveLeaveRequest = async (req, res) => {
                             }
                         ).catch(approverNotifError => {
                             console.error(`❌ Failed to send Approver notification:`, approverNotifError);
+                        });
+
+                        sendLeaveRequestNotification({
+                            body: {
+                                employeeId: leaveData.employeeId,
+                                leaveRequestId: leaveId,
+                                leaveType: leaveData.leaveTypeName,
+                                fromDate: notificationBase.fromDate,
+                                toDate: notificationBase.toDate,
+                                reason: comment || leaveData.reason,
+                                managerId: approverData.uid,
+                                approverLevel: 'approver',
+                                channels: ['push'],
+                                titleOverride: approverNotification.title,
+                                messageOverride: approverNotification.message
+                            }
+                        }, {
+                            json: () => {}
+                        }).catch(notifError => {
+                            console.error(`❌ Failed to send final approver push notification:`, notifError);
                         });
                     });
                 } else {
