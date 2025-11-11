@@ -551,18 +551,18 @@ const createLeaveRequest = async (req, res) => {
                 missingFields: missingFields
             });
         }
-       // let employerDoc = null;
-        // const loadEmployeeDoc = async () => {
-        //     if (employerDoc) return employerDoc;
-        //     const snap = await db.collection('employees')
-        //         .where('uid', '==', employeeId)
-        //         .limit(1)
-        //         .get();
-        //     if (!snap.empty) {
-        //         employerDoc = snap.docs[0].data();
-        //     }
-        //     return employerDoc;
-        // };
+       let employerDoc = null;
+        const loadEmployeeDoc = async () => {
+            if (employerDoc) return employerDoc;
+            const snap = await db.collection('employees')
+                .where('uid', '==', employeeId)
+                .limit(1)
+                .get();
+            if (!snap.empty) {
+                employerDoc = snap.docs[0].data();
+            }
+            return employerDoc;
+        };
         console.log('📨 createLeaveRequest: 3', employeeName, firstName, lastName, positionName);
         if (!employeeName || !firstName || !lastName || !positionName) {
             console.log('📨 createLeaveRequest: 4', employeeName, firstName, lastName, positionName);
