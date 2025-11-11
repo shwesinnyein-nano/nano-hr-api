@@ -580,13 +580,18 @@ module.exports = {
 // Helper: find employee doc by docId or by uid field
 const findEmployeeDocRef = async (employeeId) => {
     // Try direct doc id first
+    console.log('📨 findEmployeeDocRef: 1', employeeId);
     let docRef = db.collection('employees').doc(employeeId);
+    console.log('📨 docRef: 1', docRef);
     const byId = await docRef.get();
+    console.log('📨 byId: 1', byId);
     if (byId.exists) return docRef;
 
     // Fallback: query by uid
     const snap = await db.collection('employees').where('uid', '==', employeeId).limit(1).get();
+    console.log('📨 snap: 1', snap);
     if (!snap.empty) {
+        console.log('📨 snap.docs[0].id: 1', snap.docs[0].id);
         return db.collection('employees').doc(snap.docs[0].id);
     }
     return null;
