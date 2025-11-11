@@ -581,7 +581,7 @@ module.exports = {
 };
 
 // Helper: find employee doc by docId or by uid field
-const findEmployeeDocRef = async (employeeId) => {
+const findEmployeeDocRefq = async (employeeId) => {
     // Try direct doc id first
     console.log('📨 findEmployeeDocRef: 1', employeeId);
     let docRef = db.collection('employees').doc(employeeId);
@@ -605,7 +605,43 @@ const findEmployeeDocRef = async (employeeId) => {
     }
     return null;
 };
-
+const findEmployeeDocRef = async (employeeId) => {
+    console.log('📨 Searching employee with ID/UID:', employeeId);
+  
+    try {
+      // 1️⃣ Try direct document ID first
+      const docRef = db.collection('employees').doc(employeeId);
+      const docSnap = await docRef.get();
+  
+      if (docSnap.exists) {
+        console.log('✅ Found employee by document ID:', docSnap.id);
+        console.log('📨 Employee data:', docSnap.data());
+        return docRef;
+      }
+  
+      // 2️⃣ Fallback: query by uid field
+      const querySnap = await db.collection('employees')
+        .where('uid', '==', employeeId)
+        .limit(1)
+        .get();
+  
+      if (!querySnap.empty) {
+        const foundDoc = querySnap.docs[0];
+        console.log('✅ Found employee by UID:', foundDoc.id);
+        console.log('📨 Employee data:', foundDoc.data());
+        return db.collection('employees').doc(foundDoc.id);
+      }
+  
+      // 3️⃣ Employee not found
+      console.warn('⚠️ Employee not found:', employeeId);
+      return null;
+  
+    } catch (err) {
+      console.error('❌ Error fetching employee document:', err);
+      return null;
+    }
+  };
+  
 // POST /notifications/devices/register
 const registerDevice = async (req, res) => {
     try {
