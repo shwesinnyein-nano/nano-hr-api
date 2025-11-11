@@ -101,10 +101,6 @@ const sendLeaveRequestNotification = async (req, res) => {
             titleOverride,
             messageOverride
         } = req.body;
-
-       
-
-        
         const employeeRef = await findEmployeeDocRef(employeeId);
         console.log('📨 employeeRef: 1', employeeRef);
         if (!employeeRef) {
