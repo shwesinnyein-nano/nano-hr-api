@@ -127,27 +127,33 @@ const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, 
     switch ((level || '').toLowerCase()) {
         case 'team-lead':
             return {
-                title: `Team Lead Approval Needed`,
+                title: `Leave Request Notification`,
+                titleTh: `การแจ้งเตือนการขอลา`,
+
                 message: `${safeEmployeeName} requested ${safeLeaveType}${rangeText}. Please review as team lead.`
             };
         case 'manager':
             return {
-                title: `Manager Approval Needed`,
+                title: `Leave Request Notification`,
+                titleTh: `การแจ้งเตือนการขอลา`,
                 message: `${safeEmployeeName} submitted a ${safeLeaveType} request${rangeText}. Please approve or reject.`
             };
         case 'hr':
             return {
-                title: `HR Review Required`,
-                message: `${safeEmployeeName}'s ${safeLeaveType} request${rangeText} is ready for HR review.`
+                    title: `Leave Request Notification`,
+                    titleTh: `การแจ้งเตือนการขอลา`,
+                message: `${safeEmployeeName} requested ${safeLeaveType} ${rangeText} is ready for HR review.`
             };
         case 'approver':
             return {
-                title: `Final Approval Required`,
+                title: `Leave Request Notification`,
+                titleTh: `การแจ้งเตือนการขอลา`,
                 message: `${safeEmployeeName}'s ${safeLeaveType} request${rangeText} awaits final approval.`
             };
         default:
             return {
-                title: `Leave Approval Needed`,
+                title: `Leave Request Notification`,
+                titleTh: `การแจ้งเตือนการขอลา`,
                 message: `${safeEmployeeName} submitted a ${safeLeaveType} request${rangeText}.`
             };
     }
@@ -528,8 +534,6 @@ const createLeaveRequest = async (req, res) => {
             reason, 
             attachment 
         } = req.body;
-
-
         console.log('📨 createLeaveRequest: 2', req.body);
         
         
@@ -547,18 +551,18 @@ const createLeaveRequest = async (req, res) => {
                 missingFields: missingFields
             });
         }
-        let employerDoc = null;
-        const loadEmployeeDoc = async () => {
-            if (employerDoc) return employerDoc;
-            const snap = await db.collection('employees')
-                .where('uid', '==', employeeId)
-                .limit(1)
-                .get();
-            if (!snap.empty) {
-                employerDoc = snap.docs[0].data();
-            }
-            return employerDoc;
-        };
+       // let employerDoc = null;
+        // const loadEmployeeDoc = async () => {
+        //     if (employerDoc) return employerDoc;
+        //     const snap = await db.collection('employees')
+        //         .where('uid', '==', employeeId)
+        //         .limit(1)
+        //         .get();
+        //     if (!snap.empty) {
+        //         employerDoc = snap.docs[0].data();
+        //     }
+        //     return employerDoc;
+        // };
         console.log('📨 createLeaveRequest: 3', employeeName, firstName, lastName, positionName);
         if (!employeeName || !firstName || !lastName || !positionName) {
             console.log('📨 createLeaveRequest: 4', employeeName, firstName, lastName, positionName);
@@ -570,7 +574,7 @@ const createLeaveRequest = async (req, res) => {
                 positionName = positionName || doc.positionName || '';
             }
         }
-        console.log('📨 createLeaveRequest: 5', employerDoc);
+       // console.log('📨 createLeaveRequest: 5', employerDoc);
 
 
         if (!['daily', 'hourly'].includes(requestType)) {
@@ -917,9 +921,10 @@ const createLeaveRequest = async (req, res) => {
                 }
             
             // Send notifications to all found approvers
-            if (approverIds.length > 0) {
-                
+            if (approverIds && approverIds.length > 0) {
+                console.log('📨 approverIds: 2', approverIds);
                 for (const approverId of approverIds) {
+                    console.log('📨 approverId: 3', approverId);
                     sendLeaveRequestNotification({
                         body: {
                             employeeId: employeeId,

@@ -130,8 +130,8 @@ const createInAppNotification = async (recipientId, title, message, type, data =
 
 // Send leave request notification (FREE channels only)
 const sendLeaveRequestNotification = async (req, res) => {
-    console.log("🚀 Send leave request notification called", req.body);
-    // try {
+    console.log(" sendLeaveRequestNotification : ", req.body);
+     try {
         const { 
             employeeId, 
             leaveRequestId, // Add leave request ID
@@ -208,7 +208,9 @@ const sendLeaveRequestNotification = async (req, res) => {
                     case NOTIFICATION_CHANNELS.PUSH:
                         // Get device tokens from manager's profile
                         let deviceTokens = manager.deviceTokens || [];
+                        console.log('📨 deviceTokens: 2', deviceTokens);
                         if ((!deviceTokens || deviceTokens.length === 0) && Array.isArray(manager.devices)) {
+                            console.log('📨 manager.devices: 1', manager.devices);
                             deviceTokens = manager.devices
                                 .map(device => device && device.token)
                                 .filter(Boolean);
@@ -259,14 +261,14 @@ const sendLeaveRequestNotification = async (req, res) => {
             results: results
         });
 
-    // } catch (error) {
-    //     console.error("❌ Error sending leave request notification:", error);
-    //     return safeStatusJson(res, 500, {
-    //         success: false,
-    //         message: "Failed to send notifications",
-    //         error: error.message
-    //     });
-    // }
+    } catch (error) {
+        console.error("❌ Error sending leave request notification:", error);
+        return safeStatusJson(res, 500, {
+            success: false,
+            message: "Failed to send notifications",
+            error: error.message
+        });
+    }
 };
 
 // Send leave approval/rejection notification (FREE channels only)
