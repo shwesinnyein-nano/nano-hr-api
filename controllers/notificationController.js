@@ -582,27 +582,36 @@ module.exports = {
 
 // Helper: find employee doc by docId or by uid field
 const findEmployeeDocRef = async (employeeId) => {
-    // Try direct doc id first
     console.log('📨 findEmployeeDocRef: 1', employeeId);
-    let docRef = db.collection('employees').doc(employeeId);
-    console.log('📨 docRef: 1', docRef);
-   const byId = await docRef.get();
-    console.log('📨 byId: 1', byId);
-    if (byId.exists) return docRef;
-    // try {
-    //     const byId = await docRef.get();
-    //     console.log('📨 byId.exists:', byId.exists);
-    //   } catch (err) {
-    //     console.error('❌ Error getting employee doc:', err);
-    //   }
-          
-    // Fallback: query by uid
-    const snap = await db.collection('employees').where('uid', '==', employeeId).limit(1).get();
-    console.log('📨 snap: 1', snap);
-    if (!snap.empty) {
-        console.log('📨 snap.docs[0].id: 1', snap.docs[0].id);
-        return db.collection('employees').doc(snap.docs[0].id);
+
+    // Try direct doc id first
+    const docRef = db.collection('employees').doc(employeeId);
+    try {
+        const byId = await docRef.get();
+        console.log('📨 byId.exists:', byId.exists);
+        if (byId.exists) {
+            console.log('📨 returning docRef by id');
+            return docRef;
+        }
+    } catch (err) {
+        console.error('❌ Error getting employee doc by id:', err);
     }
+
+    // Fallback: query by uid
+    try {
+        const snap = await db.collection('employees')
+            .where('uid', '==', employeeId)
+            .limit(1)
+            .get();
+        console.log('📨 snap.empty:', snap.empty);
+        if (!snap.empty) {
+            console.log('📨 snap.docs[0].id:', snap.docs[0].id);
+            return db.collection('employees').doc(snap.docs[0].id);
+        }
+    } catch (err) {
+        console.error('❌ Error querying employee by uid:', err);
+    }
+
     return null;
 };
 const findEmployeeDocRefs = async (employeeId) => {
