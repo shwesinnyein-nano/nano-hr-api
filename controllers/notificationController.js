@@ -131,7 +131,7 @@ const createInAppNotification = async (recipientId, title, message, type, data =
 // Send leave request notification (FREE channels only)
 const sendLeaveRequestNotification = async (req, res) => {
     console.log(" sendLeaveRequestNotification : ", req.body);
-     try {
+    //  try {
         const { 
             employeeId, 
             leaveRequestId, // Add leave request ID
@@ -145,14 +145,9 @@ const sendLeaveRequestNotification = async (req, res) => {
             messageOverride
         } = req.body;
 
-        if (!employeeId || !leaveType || !managerId) {
-            return safeStatusJson(res, 400, {
-                success: false,
-                message: "Employee ID, leave type, and manager ID are required"
-            });
-        }
+       
 
-        // Get employee data (by doc id or uid)
+        
         const employeeRef = await findEmployeeDocRef(employeeId);
         console.log('📨 employeeRef: 1', employeeRef);
         if (!employeeRef) {
@@ -176,7 +171,18 @@ const sendLeaveRequestNotification = async (req, res) => {
             return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
         }
         const managerSnap = await managerRef.get();
+        console.log('📨 managerSnap: 1', managerSnap);
         const manager = managerSnap.data();
+        console.log('📨 manager: 1', manager);
+        if (!manager) {
+            return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
+        }
+        if (!manager.exists) {
+            return safeStatusJson(res, 404, {
+                success: false,
+                message: "Manager not found"
+            });
+        }
 
         // Prepare notification content
         const defaultTitle = `New Leave Request from ${employeeData.firstName} ${employeeData.lastName}`;
@@ -261,14 +267,14 @@ const sendLeaveRequestNotification = async (req, res) => {
             results: results
         });
 
-    } catch (error) {
-        console.error("❌ Error sending leave request notification:", error);
-        return safeStatusJson(res, 500, {
-            success: false,
-            message: "Failed to send notifications",
-            error: error.message
-        });
-    }
+    // } catch (error) {
+    //     console.error("❌ Error sending leave request notification:", error);
+    //     return safeStatusJson(res, 500, {
+    //         success: false,
+    //         message: "Failed to send notifications",
+    //         error: error.message
+    //     });
+    // }
 };
 
 // Send leave approval/rejection notification (FREE channels only)
