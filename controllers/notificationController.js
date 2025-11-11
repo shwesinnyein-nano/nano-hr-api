@@ -121,7 +121,7 @@ const sendLeaveRequestNotification = async (req, res) => {
         }
 
         const employeeData = employeeDoc.data();
-        console.log('📨 managerId: 1', managerId);
+        console.log('📨 employeeData: 1', employeeData);
         const managerRef = await findEmployeeDocRef(managerId);
         console.log('📨 managerRef: 1', managerRef);
         if (!managerRef) {
@@ -131,15 +131,15 @@ const sendLeaveRequestNotification = async (req, res) => {
         console.log('📨 managerSnap: 1', managerSnap);
         const manager = managerSnap.data();
         console.log('📨 manager: 1', manager);
-        if (!manager) {
-            return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
-        }
-        if (!manager.exists) {
-            return safeStatusJson(res, 404, {
-                success: false,
-                message: "Manager not found"
-            });
-        }
+        // if (!manager) {
+        //     return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
+        // }
+        // if (!manager.exists) {
+        //     return safeStatusJson(res, 404, {
+        //         success: false,
+        //         message: "Manager not found"
+        //     });
+        // }
 
         // Prepare notification content
         const defaultTitle = `New Leave Request from ${employeeData.firstName} ${employeeData.lastName}`;
@@ -611,8 +611,9 @@ const findEmployeeDocRef = async (employeeId) => {
     try {
       // 1️⃣ Try direct document ID first
       const docRef = db.collection('employees').doc(employeeId);
+      console.log('📨 docRef: 1', docRef);
       const docSnap = await docRef.get();
-  
+      console.log('📨 docSnap: 1', docSnap);
       if (docSnap.exists) {
         console.log('✅ Found employee by document ID:', docSnap.id);
         console.log('📨 Employee data:', docSnap.data());
