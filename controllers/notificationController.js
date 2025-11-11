@@ -55,7 +55,7 @@ const createNotificationRecord = async (notificationData) => {
 // Send push notification
 const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
     console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
-    try {
+    // try {
         if (!deviceTokens || deviceTokens.length === 0) {
             console.log('⚠️ No device tokens provided for push notification');
             return { success: false, message: 'No device tokens provided' };
@@ -92,10 +92,10 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             successCount: response.successCount,
             failureCount: response.failureCount
         };
-    } catch (error) {
-        console.error('❌ Error sending push notification:', error);
-        throw error;
-    }
+    // } catch (error) {
+    //     console.error('❌ Error sending push notification:', error);
+    //     throw error;
+    // }
 };
 
 // Create in-app notification
