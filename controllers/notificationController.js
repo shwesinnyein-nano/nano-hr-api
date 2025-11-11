@@ -304,14 +304,17 @@ const sendLeaveStatusNotification = async (req, res) => {
                 message: "Employee ID, status, and approver ID are required"
             });
         }
-
+        console.log('📨 employeeId: 1', employeeId);
+        console.log('📨 status: 1', status);
+        console.log('📨 approvedBy: 1', approvedBy);
         // Get employee data (by doc id or uid)
         const employeeRef = await findEmployeeDocRef(employeeId);
+        console.log('📨 employeeRef: 1', employeeRef);
         if (!employeeRef) {
             return safeStatusJson(res, 404, { success: false, message: "Employee not found" });
         }
         const employeeDoc = await employeeRef.get();
-        
+        console.log('📨 employeeDoc: 1', employeeDoc);
         if (!employeeDoc.exists) {
             return safeStatusJson(res, 404, {
                 success: false,
