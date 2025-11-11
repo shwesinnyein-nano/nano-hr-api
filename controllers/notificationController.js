@@ -581,7 +581,7 @@ module.exports = {
 };
 
 // Helper: find employee doc by docId or by uid field
-const findEmployeeDocRefq = async (employeeId) => {
+const findEmployeeDocRef = async (employeeId) => {
     // Try direct doc id first
     console.log('📨 findEmployeeDocRef: 1', employeeId);
     let docRef = db.collection('employees').doc(employeeId);
@@ -605,7 +605,7 @@ const findEmployeeDocRefq = async (employeeId) => {
     }
     return null;
 };
-const findEmployeeDocRef = async (employeeId) => {
+const findEmployeeDocRefs = async (employeeId) => {
     console.log('📨 Searching employee with ID/UID:', employeeId);
   
     try {
