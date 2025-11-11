@@ -323,7 +323,7 @@ const sendLeaveStatusNotification = async (req, res) => {
         }
 
         const employeeData = employeeDoc.data();
-
+        console.log('📨 employeeData: 1', employeeData);
         // Prepare notification content
         const title = `Leave Request ${status.charAt(0).toUpperCase() + status.slice(1)}`;
         const message = `Your leave request has been ${status}. ${reason ? `Reason: ${reason}` : ''}`;
