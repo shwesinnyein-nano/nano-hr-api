@@ -53,50 +53,7 @@ const createNotificationRecord = async (notificationData) => {
 // Removed email and SMS functions to keep costs low
 
 // Send push notification
-const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
-    console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
-    // try {
-        if (!deviceTokens || deviceTokens.length === 0) {
-            console.log('⚠️ No device tokens provided for push notification');
-            return { success: false, message: 'No device tokens provided' };
-        }
 
-        console.log('📨 FCM tokens:', deviceTokens);
-
-        // Prepare the message
-        const message = {
-            notification: {
-                title: title,
-                body: body
-            },
-            data: data,
-            tokens: deviceTokens
-        };
-        console.log('📨 FCM tokens: 1', deviceTokens);
-        // Send using Firebase Admin SDK (v13+)
-        const response = await admin.messaging().sendEachForMulticast(message);
-        
-        console.log(`📲 Push Notification sent:`);
-        console.log(`   Success Count: ${response.successCount}`);
-        console.log(`   Failure Count: ${response.failureCount}`);
-        
-        if (response.failureCount > 0) {
-            console.log('❌ Failed tokens:', response.responses
-                .map((resp, idx) => resp.success ? null : deviceTokens[idx])
-                .filter(token => token !== null));
-        }
-        
-        return { 
-            success: true, 
-            message: 'Push notification sent successfully',
-            successCount: response.successCount,
-            failureCount: response.failureCount
-        };
-    // } catch (error) {
-    //     console.error('❌ Error sending push notification:', error);
-    //     throw error;
-    // }
-};
 
 // Create in-app notification
 const createInAppNotification = async (recipientId, title, message, type, data = {}) => {
@@ -132,7 +89,7 @@ const createInAppNotification = async (recipientId, title, message, type, data =
 const sendLeaveRequestNotification = async (req, res) => {
     console.log(" sendLeaveRequestNotification : ", req.body);
     //  try {
-        const { 
+        let { 
             employeeId, 
             leaveRequestId, // Add leave request ID
             leaveType, 
@@ -274,6 +231,50 @@ const sendLeaveRequestNotification = async (req, res) => {
     //         message: "Failed to send notifications",
     //         error: error.message
     //     });
+    // }
+};
+const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+    console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
+    // try {
+        if (!deviceTokens || deviceTokens.length === 0) {
+            console.log('⚠️ No device tokens provided for push notification');
+            return { success: false, message: 'No device tokens provided' };
+        }
+
+        console.log('📨 FCM tokens:', deviceTokens);
+
+        // Prepare the message
+        const message = {
+            notification: {
+                title: title,
+                body: body
+            },
+            data: data,
+            tokens: deviceTokens
+        };
+        console.log('📨 FCM tokens: 1', deviceTokens);
+        // Send using Firebase Admin SDK (v13+)
+        const response = await admin.messaging().sendEachForMulticast(message);
+        
+        console.log(`📲 Push Notification sent:`);
+        console.log(`   Success Count: ${response.successCount}`);
+        console.log(`   Failure Count: ${response.failureCount}`);
+        
+        if (response.failureCount > 0) {
+            console.log('❌ Failed tokens:', response.responses
+                .map((resp, idx) => resp.success ? null : deviceTokens[idx])
+                .filter(token => token !== null));
+        }
+        
+        return { 
+            success: true, 
+            message: 'Push notification sent successfully',
+            successCount: response.successCount,
+            failureCount: response.failureCount
+        };
+    // } catch (error) {
+    //     console.error('❌ Error sending push notification:', error);
+    //     throw error;
     // }
 };
 
