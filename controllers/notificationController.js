@@ -586,15 +586,15 @@ const findEmployeeDocRef = async (employeeId) => {
     console.log('📨 findEmployeeDocRef: 1', employeeId);
     let docRef = db.collection('employees').doc(employeeId);
     console.log('📨 docRef: 1', docRef);
-   // const byId = await docRef.get();
-    // console.log('📨 byId: 1', byId);
-    // if (byId.exists) return docRef;
-    try {
-        const byId = await docRef.get();
-        console.log('📨 byId.exists:', byId.exists);
-      } catch (err) {
-        console.error('❌ Error getting employee doc:', err);
-      }
+   const byId = await docRef.get();
+    console.log('📨 byId: 1', byId);
+    if (byId.exists) return docRef;
+    // try {
+    //     const byId = await docRef.get();
+    //     console.log('📨 byId.exists:', byId.exists);
+    //   } catch (err) {
+    //     console.error('❌ Error getting employee doc:', err);
+    //   }
           
     // Fallback: query by uid
     const snap = await db.collection('employees').where('uid', '==', employeeId).limit(1).get();
