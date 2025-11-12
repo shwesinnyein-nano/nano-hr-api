@@ -1644,6 +1644,19 @@ const approveLeaveRequest = async (req, res) => {
         
         await leaveRequestRef.update(updateData);
         
+        const notificationBase = {
+            employeeName: leaveData.employeeName
+                || [leaveData.firstName, leaveData.lastName].filter(Boolean).join(" ")
+                || leaveData.employeeId
+                || "Employee",
+            leaveTypeName: leaveData.leaveTypeName
+                || leaveData.leaveType
+                || leaveData.leaveTypeNameEng
+                || "leave",
+            fromDate: leaveData.fromDate || leaveData.date || "",
+            toDate: leaveData.toDate || leaveData.date || ""
+        };
+
 
         // Send notification to employee about status change (async, don't wait for it)
         try {
@@ -1752,7 +1765,7 @@ const approveLeaveRequest = async (req, res) => {
                 const hrQuery = await employeesRef.where("positionName", "==", "HR").get();
                 
                 if (!hrQuery.empty) {
-                    const hrNotification = buildApproverNotificationContent('hr', notificationBase);
+                        const hrNotification = buildApproverNotificationContent('hr', notificationBase);
                     hrQuery.forEach(hrDoc => {
                         const hrData = hrDoc.data();
                     
