@@ -257,14 +257,35 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
 
         // Prepare the message
         const message = {
+            tokens: sanitizedTokens,
             notification: {
                 title: title,
                 body: body
             },
             data: data,
-            tokens: sanitizedTokens
+            android: {
+                priority: 'high',
+                notification: {
+                    sound: 'default'
+                }
+            },
+            apns: {
+                headers: {
+                    'apns-priority': '10',
+                    'apns-push-type': 'alert'
+                },
+                payload: {
+                    aps: {
+                        alert: {
+                            title: title,
+                            body: body
+                        },
+                        sound: 'default',
+                        badge: 1
+                    }
+                }
+            }
         };
-        console.log('📨 FCM tokens: 1', deviceTokens);
         // Send using Firebase Admin SDK (v13+)
         const response = await admin.messaging().sendEachForMulticast(message);
         
@@ -274,7 +295,73 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
         
         if (response.failureCount > 0) {
             console.log('❌ Failed tokens:', response.responses
-                .map((resp, idx) => resp.success ? null : deviceTokens[idx])
+                .map((resp, idx) => resp.success ? null : sanitizedTokens[idx])
+                .filter(token => token !== null));
+        }
+        
+        return { 
+            success: true, 
+            message: 'Push notification sent successfully',
+            successCount: response.successCount,
+            failureCount: response.failureCount
+        };
+    // } catch (error) {
+    //     console.error('❌ Error sending push notification:', error);
+    //     throw error;
+    // }
+};
+const sendPushNotification3 = async (deviceTokens, title, body, data = {}) => {
+    const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
+    console.log('📨 sendPushNotification: tokens', sanitizedTokens, title, body, data);
+
+    if (sanitizedTokens.length === 0) {
+        console.log('⚠️ No valid device tokens provided for push notification');
+        return { success: false, message: 'No device tokens provided' };
+    }
+
+    console.log('📨 FCM tokens:', sanitizedTokens);
+
+        // Prepare the message
+        const message = {
+            tokens: sanitizedTokens,
+            notification: {
+                title: title,
+                body: body
+            },
+            data: data,
+            android: {
+                priority: 'high',
+                notification: {
+                    sound: 'default'
+                }
+            },
+            apns: {
+                headers: {
+                    'apns-priority': '10',
+                    'apns-push-type': 'alert'
+                },
+                payload: {
+                    aps: {
+                        alert: {
+                            title: title,
+                            body: body
+                        },
+                        sound: 'default',
+                        badge: 1
+                    }
+                }
+            }
+        };
+        // Send using Firebase Admin SDK (v13+)
+        const response = await admin.messaging().sendEachForMulticast(message);
+        
+        console.log(`📲 Push Notification sent:`);
+        console.log(`   Success Count: ${response.successCount}`);
+        console.log(`   Failure Count: ${response.failureCount}`);
+        
+        if (response.failureCount > 0) {
+            console.log('❌ Failed tokens:', response.responses
+                .map((resp, idx) => resp.success ? null : sanitizedTokens[idx])
                 .filter(token => token !== null));
         }
         
@@ -291,18 +378,19 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
 };
 
 const sendPushNotification2 = async (deviceTokens, title, body, data = {}) => {
-    console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
+    const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
+    console.log('📨 sendPushNotification: 1', sanitizedTokens, title, body, data);
   
-    if (!deviceTokens || deviceTokens.length === 0) {
+    if (sanitizedTokens.length === 0) {
       console.log('⚠️ No device tokens provided for push notification');
       return { success: false, message: 'No device tokens provided' };
     }
   
-    console.log('📨 FCM tokens:', deviceTokens);
+    console.log('📨 FCM tokens:', sanitizedTokens);
   
     // Prepare the message with Android + iOS optimization
     const message = {
-      tokens: deviceTokens,
+      tokens: sanitizedTokens,
       notification: {
         title: title,
         body: body,
