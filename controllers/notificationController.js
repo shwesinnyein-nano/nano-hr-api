@@ -176,8 +176,8 @@ const sendLeaveRequestNotification = async (req, res) => {
                                 .map(device => device && device.token)
                                 .filter(Boolean);
                         }
-                        console.log('📨 deviceTokens: 1', deviceTokens);
-                        if (deviceTokens.length > 0) {
+                        console.log('📨 deviceTokens: 1', deviceTokens.length);
+                        if (deviceTokens && deviceTokens.length > 0) {
                             const uniqueTokens = Array.from(new Set(deviceTokens));
                             const pushResult = await sendPushNotification(uniqueTokens, title, message, {
                                 type: 'leave_request',
@@ -232,15 +232,27 @@ const sendLeaveRequestNotification = async (req, res) => {
     //     });
     // }
 };
-const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
-    console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
-    // try {
-        if (!deviceTokens || deviceTokens.length === 0) {
-            console.log('⚠️ No device tokens provided for push notification');
-            return { success: false, message: 'No device tokens provided' };
-        }
+const sanitizeDeviceTokens = (tokens = []) => {
+    if (!Array.isArray(tokens)) return [];
+    return Array.from(
+        new Set(
+            tokens
+                .map(token => (typeof token === 'string' ? token.trim() : ''))
+                .filter(token => token.length > 0)
+        )
+    );
+};
 
-        console.log('📨 FCM tokens:', deviceTokens);
+const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+    const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
+    console.log('📨 sendPushNotification: tokens', sanitizedTokens, title, body, data);
+
+    if (sanitizedTokens.length === 0) {
+        console.log('⚠️ No valid device tokens provided for push notification');
+        return { success: false, message: 'No device tokens provided' };
+    }
+
+    console.log('📨 FCM tokens:', sanitizedTokens);
 
         // Prepare the message
         const message = {
@@ -249,7 +261,7 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
                 body: body
             },
             data: data,
-            tokens: deviceTokens
+            tokens: sanitizedTokens
         };
         console.log('📨 FCM tokens: 1', deviceTokens);
         // Send using Firebase Admin SDK (v13+)
@@ -330,7 +342,7 @@ const sendPushNotification2 = async (deviceTokens, title, body, data = {}) => {
   
       if (response.failureCount > 0) {
         const failedTokens = response.responses
-          .map((resp, idx) => (resp.success ? null : deviceTokens[idx]))
+                .map((resp, idx) => (resp.success ? null : sanitizedTokens[idx]))
           .filter(token => token !== null);
         console.log('❌ Failed tokens:', failedTokens);
       }
