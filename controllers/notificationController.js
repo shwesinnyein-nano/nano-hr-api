@@ -232,7 +232,7 @@ const sendLeaveRequestNotification = async (req, res) => {
     //     });
     // }
 };
-const sendPushNotification1 = async (deviceTokens, title, body, data = {}) => {
+const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
     console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
     // try {
         if (!deviceTokens || deviceTokens.length === 0) {
@@ -277,7 +277,7 @@ const sendPushNotification1 = async (deviceTokens, title, body, data = {}) => {
     // }
 };
 
-const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+const sendPushNotification2 = async (deviceTokens, title, body, data = {}) => {
     console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
   
     if (!deviceTokens || deviceTokens.length === 0) {
