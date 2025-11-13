@@ -750,15 +750,63 @@ const registerDevice = async (req, res) => {
         if (!employeeId || !token) {
             return res.status(400).json({ success: false, message: 'employeeId and token are required' });
         }
+
         const empRef = await findEmployeeDocRef(employeeId);
         if (!empRef) {
             return res.status(404).json({ success: false, message: 'Employee not found' });
         }
 
-        await empRef.set({
-            deviceTokens: FieldValue.arrayUnion(token),
-            devices: FieldValue.arrayUnion({ token, platform: platform || 'unknown', appVersion: appVersion || '', registeredAt: new Date().toISOString() })
-        }, { merge: true });
+        const normalizedPlatform = (platform || 'unknown').toLowerCase();
+        const nowIso = new Date().toISOString();
+
+        await db.runTransaction(async (transaction) => {
+            const snap = await transaction.get(empRef);
+            const existingData = snap.exists ? snap.data() : {};
+
+            const existingDeviceTokens = Array.isArray(existingData.deviceTokens)
+                ? existingData.deviceTokens
+                : [];
+            const existingDevices = Array.isArray(existingData.devices)
+                ? existingData.devices
+                : [];
+
+            const dedupedTokens = Array.from(
+                new Set(
+                    existingDeviceTokens
+                        .concat(token)
+                        .filter(t => typeof t === 'string' && t.trim().length > 0)
+                        .map(t => t.trim())
+                )
+            );
+
+            const filteredDevices = existingDevices.filter(device => {
+                if (!device || typeof device !== 'object') return false;
+                if (!device.token || typeof device.token !== 'string') return false;
+
+                const sameToken = device.token === token;
+                const samePlatform = device.platform && device.platform.toLowerCase() === normalizedPlatform;
+
+                // keep device records that don't match platform/token combo
+                return !sameToken && !samePlatform;
+            });
+
+            filteredDevices.push({
+                token,
+                platform: normalizedPlatform,
+                appVersion: appVersion || '',
+                registeredAt: nowIso
+            });
+
+            transaction.set(
+                empRef,
+                {
+                    deviceTokens: dedupedTokens,
+                    devices: filteredDevices,
+                    updatedAt: nowIso
+                },
+                { merge: true }
+            );
+        });
 
         return res.json({ success: true, message: 'Device registered' });
     } catch (err) {
@@ -784,9 +832,31 @@ const unregisterDevice = async (req, res) => {
         }
         if (!empRef) return res.status(404).json({ success: false, message: 'Employee not found for token' });
 
-        await empRef.set({
-            deviceTokens: FieldValue.arrayRemove(token)
-        }, { merge: true });
+        await db.runTransaction(async (transaction) => {
+            const snap = await transaction.get(empRef);
+            if (!snap.exists) return;
+
+            const data = snap.data() || {};
+            const existingTokens = Array.isArray(data.deviceTokens) ? data.deviceTokens : [];
+            const existingDevices = Array.isArray(data.devices) ? data.devices : [];
+
+            const remainingTokens = existingTokens.filter(
+                existingToken => typeof existingToken === 'string' && existingToken !== token
+            );
+            const remainingDevices = existingDevices.filter(
+                device => device && device.token !== token
+            );
+
+            transaction.set(
+                empRef,
+                {
+                    deviceTokens: remainingTokens,
+                    devices: remainingDevices,
+                    updatedAt: new Date().toISOString()
+                },
+                { merge: true }
+            );
+        });
 
         return res.json({ success: true, message: 'Device unregistered' });
     } catch (err) {
