@@ -118,9 +118,10 @@ const formatLeaveDateRange = (fromDate, toDate) => {
     return fromDate || toDate || '';
 };
 
-const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, fromDate, toDate }) => {
+const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, leaveTypeNameEng, fromDate, toDate }) => {
     const safeEmployeeName = employeeName || 'An employee';
     const safeLeaveType = leaveTypeName || 'leave';
+    const leaveLabel = leaveTypeNameEng ? `${leaveTypeNameEng} (${safeLeaveType})` : safeLeaveType;
     const dateRange = formatLeaveDateRange(fromDate, toDate);
     const rangeText = dateRange ? ` (${dateRange})` : '';
 
@@ -130,31 +131,31 @@ const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, 
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
 
-                message: `${safeEmployeeName} requested ${safeLeaveType}${rangeText}. Please review as team lead.`
+                message: `${safeEmployeeName} requested ${leaveLabel}${rangeText}. Please review as team lead.`
             };
         case 'manager':
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${safeLeaveType} request${rangeText}. Please approve or reject.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request${rangeText}. Please approve or reject.`
             };
         case 'hr':
             return {
                     title: `Leave Request Notification`,
                     titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} requested ${safeLeaveType} ${rangeText} is ready for HR review.`
+                message: `${safeEmployeeName} requested ${leaveLabel}${rangeText} is ready for HR review.`
             };
         case 'approver':
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName}'s ${safeLeaveType} request${rangeText} awaits final approval.`
+                message: `${safeEmployeeName}'s ${leaveLabel} request${rangeText} awaits final approval.`
             };
         default:
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${safeLeaveType} request${rangeText}.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request${rangeText}.`
             };
     }
 };
@@ -456,6 +457,8 @@ const getEmployeeLeaveList = async (req, res) => {
                 employeeId: leaveData.employeeId,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
+                leaveTypeNameEng: leaveData.leaveTypeNameEng,
+               
                 requestType: leaveData.requestType || 'daily',
                 // Daily leave fields
                 startDate: leaveData.startDate || leaveData.fromDate || null,
@@ -524,6 +527,7 @@ const createLeaveRequest = async (req, res) => {
             requestDate,    // Add request date
             leaveType, 
             leaveTypeName, 
+            leaveTypeNameEng,
             requestType, // 'daily' or 'hourly'
             fromDate, 
             toDate, 
@@ -670,7 +674,17 @@ const createLeaveRequest = async (req, res) => {
 
             // Load leave type quota
             const leaveSettingSnap = await db.collection("leave-settings").doc(leaveType).get();
-            const maxDays = leaveSettingSnap.exists ? (leaveSettingSnap.data().leaveDay || 0) : 0;
+            let leaveSettingData = null;
+            if (leaveSettingSnap.exists) {
+                leaveSettingData = leaveSettingSnap.data();
+                if (!leaveTypeName) {
+                    leaveTypeName = leaveSettingData.leaveTypeName || leaveSettingData.leave || leaveSettingData.title || leaveTypeName;
+                }
+                if (!leaveTypeNameEng) {
+                    leaveTypeNameEng = leaveSettingData.leaveTypeNameEng || leaveSettingData.titleEng || leaveTypeNameEng;
+                }
+            }
+            const maxDays = leaveSettingData ? (leaveSettingData.leaveDay || 0) : 0;
 
             // Sum approved used days for this employee, leaveType, and year
             const approvedSnap = await db.collection("employee-leave")
@@ -865,6 +879,7 @@ const createLeaveRequest = async (req, res) => {
             requestDate: requestDate || currentDateTime.split('T')[0], // Use provided date or current date (YYYY-MM-DD)
             leaveType: leaveType,
             leaveTypeName: leaveTypeName,
+            leaveTypeNameEng: leaveTypeNameEng,
             requestType: requestType,
             reason: reason,
             attachment: attachmentData,
@@ -911,6 +926,7 @@ const createLeaveRequest = async (req, res) => {
                 const { title: approverTitle, message: approverMessage } = buildApproverNotificationContent(firstApprover, {
                     employeeName: employeeDisplayName,
                     leaveTypeName,
+                    leaveTypeNameEng,
                     fromDate: notificationFromDate,
                     toDate: notificationToDate
                 });
@@ -930,6 +946,7 @@ const createLeaveRequest = async (req, res) => {
                             employeeId: employeeId,
                             leaveRequestId: leaveRequestId,
                             leaveType: leaveTypeName,
+                            leaveTypeNameEng,
                             fromDate: notificationFromDate || notificationToDate,
                             toDate: notificationToDate || notificationFromDate,
                             reason: reason,
@@ -967,6 +984,7 @@ const createLeaveRequest = async (req, res) => {
                 employeeId: savedLeaveRequest.employeeId,
                 leaveType: savedLeaveRequest.leaveType,
                 leaveTypeName: savedLeaveRequest.leaveTypeName,
+                leaveTypeNameEng: savedLeaveRequest.leaveTypeNameEng,
                 requestType: savedLeaveRequest.requestType,
                 reason: savedLeaveRequest.reason,
                 attachment: savedLeaveRequest.attachment,
@@ -1653,6 +1671,7 @@ const approveLeaveRequest = async (req, res) => {
                 || leaveData.leaveType
                 || leaveData.leaveTypeNameEng
                 || "leave",
+            leaveTypeNameEng: leaveData.leaveTypeNameEng || "",
             fromDate: leaveData.fromDate || leaveData.date || "",
             toDate: leaveData.toDate || leaveData.date || ""
         };
@@ -1669,6 +1688,7 @@ const approveLeaveRequest = async (req, res) => {
                     approvedBy: userId,
                     reason: comment || `Leave request ${action} by ${userApprovalLevel}`,
                     leaveType: leaveData.leaveTypeName,
+                    leaveTypeNameEng: leaveData.leaveTypeNameEng,
                     fromDate: leaveData.fromDate || leaveData.date,
                     toDate: leaveData.toDate || leaveData.date,
                     employeeName: leaveData.employeeName, // From stored data
@@ -1729,6 +1749,7 @@ const approveLeaveRequest = async (req, res) => {
                                 employeeId: leaveData.employeeId,
                                 leaveRequestId: leaveId,
                                 leaveType: leaveData.leaveTypeName,
+                                leaveTypeNameEng: leaveData.leaveTypeNameEng,
                                 fromDate: notificationBase.fromDate,
                                 toDate: notificationBase.toDate,
                                 reason: comment || leaveData.reason,
@@ -1796,6 +1817,7 @@ const approveLeaveRequest = async (req, res) => {
                                 employeeId: leaveData.employeeId,
                                 leaveRequestId: leaveId,
                                 leaveType: leaveData.leaveTypeName,
+                                leaveTypeNameEng: leaveData.leaveTypeNameEng,
                                 fromDate: notificationBase.fromDate,
                                 toDate: notificationBase.toDate,
                                 reason: comment || leaveData.reason,
@@ -1861,6 +1883,7 @@ const approveLeaveRequest = async (req, res) => {
                                 employeeId: leaveData.employeeId,
                                 leaveRequestId: leaveId,
                                 leaveType: leaveData.leaveTypeName,
+                                leaveTypeNameEng: leaveData.leaveTypeNameEng,
                                 fromDate: notificationBase.fromDate,
                                 toDate: notificationBase.toDate,
                                 reason: comment || leaveData.reason,

@@ -93,6 +93,7 @@ const sendLeaveRequestNotification = async (req, res) => {
             employeeId, 
             leaveRequestId, // Add leave request ID
             leaveType, 
+            leaveTypeNameEng,
             fromDate, 
             toDate, 
             reason, 
@@ -146,7 +147,8 @@ const sendLeaveRequestNotification = async (req, res) => {
             }
             return fromDate || toDate || '';
         })();
-        const defaultMessage = `${employeeData.firstName} ${employeeData.lastName} has requested ${leaveType} leave${dateRange ? ` (${dateRange})` : ''}.${reason ? ` Reason: ${reason}` : ''}`;
+        const leaveLabel = leaveTypeNameEng ? `${leaveTypeNameEng} (${leaveType})` : leaveType;
+        const defaultMessage = `${employeeData.firstName} ${employeeData.lastName} has requested ${leaveLabel} leave${dateRange ? ` (${dateRange})` : ''}.${reason ? ` Reason: ${reason}` : ''}`;
         const title = titleOverride || defaultTitle;
         const message = messageOverride || defaultMessage;
 
@@ -181,7 +183,8 @@ const sendLeaveRequestNotification = async (req, res) => {
                                 type: 'leave_request',
                                 employeeId: employeeId,
                                 leaveRequestId: leaveRequestId,
-                                leaveType: leaveType
+                                leaveType: leaveType,
+                                leaveTypeNameEng: leaveTypeNameEng
                             });
                             results.push({ channel: 'push', ...pushResult });
                         } else {
@@ -196,7 +199,7 @@ const sendLeaveRequestNotification = async (req, res) => {
                             title,
                             message,
                             NOTIFICATION_TYPES.LEAVE_REQUEST,
-                            { employeeId, leaveRequestId, leaveType, fromDate, toDate, reason }
+                            { employeeId, leaveRequestId, leaveType, leaveTypeNameEng, fromDate, toDate, reason }
                         );
                         results.push({ channel: 'in_app', notification: inAppResult });
                         break;
@@ -285,6 +288,7 @@ const sendLeaveStatusNotification = async (req, res) => {
             approvedBy,
             reason,
             leaveType,
+            leaveTypeNameEng,
             fromDate,
             toDate,
             employeeName,
@@ -338,6 +342,7 @@ const sendLeaveStatusNotification = async (req, res) => {
                                 employeeId: employeeId,
                                 leaveRequestId: leaveRequestId,
                                 leaveType: leaveType,
+                                leaveTypeNameEng: leaveTypeNameEng,
                                 employeeName: employeeName,
                                 positionName: positionName
                             });
@@ -359,6 +364,7 @@ const sendLeaveStatusNotification = async (req, res) => {
                                 status, 
                                 reason,
                                 leaveType,
+                                leaveTypeNameEng,
                                 fromDate,
                                 toDate,
                                 employeeName,
