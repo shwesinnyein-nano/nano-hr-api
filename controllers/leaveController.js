@@ -142,25 +142,29 @@ const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, 
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText}. Please check it out.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText}. Please check it out.`,
+                messageTh: `${safeEmployeeName} ส่งคำขอ ${leaveLabel} ${rangeText}. กรุณาตรวจสอบ.`
             };
         case 'hr':
             return {
                     title: `Leave Request Notification`,
                     titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`,
+                messageTh: `${safeEmployeeName} ส่งคำขอ ${leaveLabel} ${rangeText}. กรุณาตรวจสอบ.`
             };
         case 'approver':
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`,
+                messageTh: `${safeEmployeeName} ส่งคำขอ ${leaveLabel} ${rangeText}. กรุณาตรวจสอบ.`
             };
         default:
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`,
+                messageTh: `${safeEmployeeName} ส่งคำขอ ${leaveLabel} ${rangeText}. กรุณาตรวจสอบ.`
             };
     }
 };
@@ -1253,7 +1257,7 @@ const updateLeaveRequestStatus = async (req, res) => {
                     leaveRequestId: leaveId,
                     status: status,
                     approvedBy: approvedBy,
-                    reason: rejectedReason || `Leave request ${status}`,
+                    reason: status === 'rejected' ? (rejectedReason || '') : '',
                     leaveType: leaveData.leaveTypeName,
                     fromDate: leaveData.fromDate,
                     toDate: leaveData.toDate,
@@ -1294,6 +1298,7 @@ const updateLeaveRequestStatus = async (req, res) => {
                                     hrData.uid,
                                     'Leave Request Notification',
                                     `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText}. Please check it out.`,
+                                    
                                     //`${approverData.firstName} ${approverData.lastName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
                                     'leave_approved_by_manager',
                                     {
@@ -1749,7 +1754,7 @@ const approveLeaveRequest = async (req, res) => {
                     leaveRequestId: leaveId,
                     status: newStatus,
                     approvedBy: userId,
-                    reason: comment || `Leave request ${action} by ${userApprovalLevel}`,
+                    reason: action === 'reject' ? (comment || leaveData.reason || '') : (comment || ''),
                     leaveType: leaveData.leaveTypeName,
                     leaveTypeNameEng: leaveData.leaveTypeNameEng,
                     fromDate: leaveData.fromDate || leaveData.date,
@@ -1815,7 +1820,6 @@ const approveLeaveRequest = async (req, res) => {
                                 leaveTypeNameEng: leaveData.leaveTypeNameEng,
                                 fromDate: notificationBase.fromDate,
                                 toDate: notificationBase.toDate,
-                                reason: comment || leaveData.reason,
                                 managerId: hrData.uid,
                                 approverLevel: 'hr',
                                 channels: ['push'],
@@ -1883,7 +1887,6 @@ const approveLeaveRequest = async (req, res) => {
                                 leaveTypeNameEng: leaveData.leaveTypeNameEng,
                                 fromDate: notificationBase.fromDate,
                                 toDate: notificationBase.toDate,
-                                reason: comment || leaveData.reason,
                                 managerId: hrData.uid,
                                 approverLevel: 'hr',
                                 channels: ['push'],
@@ -1949,7 +1952,6 @@ const approveLeaveRequest = async (req, res) => {
                                 leaveTypeNameEng: leaveData.leaveTypeNameEng,
                                 fromDate: notificationBase.fromDate,
                                 toDate: notificationBase.toDate,
-                                reason: comment || leaveData.reason,
                                 managerId: approverData.uid,
                                 approverLevel: 'approver',
                                 channels: ['push'],
