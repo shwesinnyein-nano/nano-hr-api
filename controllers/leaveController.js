@@ -131,31 +131,31 @@ const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, 
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
 
-                message: `${safeEmployeeName} requested ${leaveLabel}${rangeText}. Please review as team lead.`
+                message: `${safeEmployeeName} requested ${leaveLabel}${rangeText}. Please check it out.`
             };
         case 'manager':
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${leaveLabel} request${rangeText}. Please approve or reject.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText}. Please check it out.`
             };
         case 'hr':
             return {
                     title: `Leave Request Notification`,
                     titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} requested ${leaveLabel}${rangeText} is ready for HR review.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`
             };
         case 'approver':
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName}'s ${leaveLabel} request${rangeText} awaits final approval.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`
             };
         default:
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-                message: `${safeEmployeeName} submitted a ${leaveLabel} request${rangeText}.`
+                message: `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText} . Please check it out.`
             };
     }
 };
@@ -460,6 +460,8 @@ const getEmployeeLeaveList = async (req, res) => {
                 leaveTypeNameEng: leaveData.leaveTypeNameEng,
                
                 requestType: leaveData.requestType || 'daily',
+                isHalfDay: leaveData.isHalfDay || false,
+                halfDayType: leaveData.halfDayType || null,
                 // Daily leave fields
                 startDate: leaveData.startDate || leaveData.fromDate || null,
                 endDate: leaveData.endDate || leaveData.toDate || null,
@@ -467,7 +469,9 @@ const getEmployeeLeaveList = async (req, res) => {
                 toDate: leaveData.toDate || leaveData.endDate || null,
                 // Hourly leave fields
                 date: leaveData.date || null,
-                workingShift: leaveData.workingShift || null,
+                workingShift: leaveData.workingShift || leaveData.shiftName || null,
+                shiftId: leaveData.shiftId || null,
+                shiftName: leaveData.shiftName || null,
                 startTime: leaveData.startTime || null,
                 endTime: leaveData.endTime || null,
                 // Common fields
@@ -536,7 +540,12 @@ const createLeaveRequest = async (req, res) => {
             startTime, // for hourly leave
             endTime, // for hourly leave
             reason, 
-            attachment 
+            attachment,
+            attachments,
+            isHalfDay = false,
+            halfDayType,
+            shiftId,
+            shiftName
         } = req.body;
         console.log('📨 createLeaveRequest: 2', req.body);
         
@@ -580,6 +589,19 @@ const createLeaveRequest = async (req, res) => {
         }
        // console.log('📨 createLeaveRequest: 5', employerDoc);
 
+
+        // Support legacy / snake_case payload keys from the client
+        if (!workingShift) workingShift = req.body.working_shift || req.body.shiftName || req.body.shift_name || workingShift;
+        if (!startTime) startTime = req.body.start_time || startTime;
+        if (!endTime) endTime = req.body.end_time || endTime;
+        if (!shiftId) shiftId = req.body.shift_id || shiftId;
+        if (!shiftName) shiftName = req.body.shift_name || shiftName;
+        if (!date) date = req.body.date || req.body.fromDate || date;
+
+        // Normalize attachments array into legacy attachment field
+        if (!attachment && Array.isArray(attachments) && attachments.length > 0) {
+            attachment = attachments;
+        }
 
         if (!['daily', 'hourly'].includes(requestType)) {
             return res.status(400).json({ 
@@ -713,6 +735,7 @@ const createLeaveRequest = async (req, res) => {
                         success: false,
                         code: "INSUFFICIENT_BALANCE",
                         message: `Requested ${requestedDays} days exceeds remaining ${remainingDays} days`,
+                        messageTh: `คำขอ ${requestedDays} วันเกินจาก ${remainingDays} วันที่เหลือ`,
                         positionName,
                         hoursPerDay: hoursPerDayForValidation,
                         requestedDays,
@@ -730,6 +753,7 @@ const createLeaveRequest = async (req, res) => {
                         success: false,
                         code: "INSUFFICIENT_BALANCE",
                         message: `Requested ${requestedHours} hours exceeds remaining ${remainingHours} hours`,
+                        messageTh: `คำขอ ${requestedHours} ชั่วโมงเกินจาก ${remainingHours} ชั่วโมงที่เหลือ`,
                         positionName,
                         hoursPerDay: hoursPerDayForValidation,
                         requestedHours,
@@ -883,6 +907,8 @@ const createLeaveRequest = async (req, res) => {
             requestType: requestType,
             reason: reason,
             attachment: attachmentData,
+            isHalfDay: Boolean(isHalfDay),
+            halfDayType: Boolean(isHalfDay) ? (halfDayType || 'morning') : null,
             status: initialStatus,
             statusName: initialStatusName,
             // Approval workflow fields
@@ -905,6 +931,8 @@ const createLeaveRequest = async (req, res) => {
             leaveRequestData.workingShift = workingShift;
             leaveRequestData.startTime = startTime;
             leaveRequestData.endTime = endTime;
+            if (shiftId) leaveRequestData.shiftId = shiftId;
+            if (shiftName) leaveRequestData.shiftName = shiftName;
             leaveRequestData.totalHours = totalHours; // Total hours taken
             leaveRequestData.totalDays = totalDays; // Hours converted to days (8 hours = 1 day)
         }
@@ -978,6 +1006,7 @@ const createLeaveRequest = async (req, res) => {
         res.json({
             success: true,
             message: "Leave request created successfully",
+            messageTh: "คำขอลาสำเร็จสร้างแล้ว",
             leaveRequest: {
                 id: savedLeaveRequest.id,
                 uid: savedLeaveRequest.uid,
@@ -986,6 +1015,8 @@ const createLeaveRequest = async (req, res) => {
                 leaveTypeName: savedLeaveRequest.leaveTypeName,
                 leaveTypeNameEng: savedLeaveRequest.leaveTypeNameEng,
                 requestType: savedLeaveRequest.requestType,
+                isHalfDay: savedLeaveRequest.isHalfDay || false,
+                halfDayType: savedLeaveRequest.halfDayType || null,
                 reason: savedLeaveRequest.reason,
                 attachment: savedLeaveRequest.attachment,
                 status: savedLeaveRequest.status,
@@ -1001,7 +1032,9 @@ const createLeaveRequest = async (req, res) => {
                 // Hourly leave fields
                 ...(requestType === 'hourly' && {
                     date: savedLeaveRequest.date,
-                    workingShift: savedLeaveRequest.workingShift,
+                    workingShift: savedLeaveRequest.workingShift || savedLeaveRequest.shiftName || null,
+                    shiftId: savedLeaveRequest.shiftId || null,
+                    shiftName: savedLeaveRequest.shiftName || null,
                     startTime: savedLeaveRequest.startTime,
                     endTime: savedLeaveRequest.endTime,
                     totalHours: savedLeaveRequest.totalHours || 0
@@ -1044,6 +1077,7 @@ const getAllLeaveRequests = async (req, res) => {
             return res.json({
                 success: true,
                 message: "No leave requests found",
+                messageTh: "ไม่พบคำขอลา",
                 data: [],
                 count: 0,
                 totalPages: 0,
@@ -1060,7 +1094,10 @@ const getAllLeaveRequests = async (req, res) => {
                 employeeId: leaveData.employeeId,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
+                leaveTypeNameEng: leaveData.leaveTypeNameEng,
                 requestType: leaveData.requestType,
+                isHalfDay: leaveData.isHalfDay || false,
+                halfDayType: leaveData.halfDayType || null,
                 reason: leaveData.reason,
                 status: leaveData.status,
                 statusName: leaveData.statusName,
@@ -1076,7 +1113,9 @@ const getAllLeaveRequests = async (req, res) => {
                 // Hourly leave fields
                 ...(leaveData.requestType === 'hourly' && {
                     date: leaveData.date,
-                    workingShift: leaveData.workingShift,
+                    workingShift: leaveData.workingShift || leaveData.shiftName || null,
+                    shiftId: leaveData.shiftId || null,
+                    shiftName: leaveData.shiftName || null,
                     startTime: leaveData.startTime,
                     endTime: leaveData.endTime
                 })
@@ -1093,6 +1132,7 @@ const getAllLeaveRequests = async (req, res) => {
         res.json({
             success: true,
             message: "Leave requests retrieved successfully",
+            messageTh: "คำขอลาของพนักงานของคุณ",
             count: paginatedData.length,
             totalRecords: totalRecords,
             totalPages: totalPages,
@@ -1332,7 +1372,10 @@ const getLeaveRequestById = async (req, res) => {
                 employeeId: leaveData.employeeId,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
+                leaveTypeNameEng: leaveData.leaveTypeNameEng,
                 requestType: leaveData.requestType,
+                isHalfDay: leaveData.isHalfDay || false,
+                halfDayType: leaveData.halfDayType || null,
                 reason: leaveData.reason,
                 attachment: leaveData.attachment,
                 status: leaveData.status,
@@ -1352,7 +1395,9 @@ const getLeaveRequestById = async (req, res) => {
                 // Hourly leave fields
                 ...(leaveData.requestType === 'hourly' && {
                     date: leaveData.date,
-                    workingShift: leaveData.workingShift,
+                    workingShift: leaveData.workingShift || leaveData.shiftName || null,
+                    shiftId: leaveData.shiftId || null,
+                    shiftName: leaveData.shiftName || null,
                     startTime: leaveData.startTime,
                     endTime: leaveData.endTime
                 })
@@ -1455,7 +1500,10 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 requestDate: leaveData.requestDate,
                 leaveType: leaveData.leaveType,
                 leaveTypeName: leaveData.leaveTypeName,
+                leaveTypeNameEng: leaveData.leaveTypeNameEng,
                 requestType: leaveData.requestType || 'daily',
+                isHalfDay: leaveData.isHalfDay || false,
+                halfDayType: leaveData.halfDayType || null,
                 startDate: leaveData.startDate || leaveData.fromDate || null,
                 endDate: leaveData.endDate || leaveData.toDate || null,
                 totalHours: leaveData.totalHours || 0,
@@ -1467,7 +1515,15 @@ const getLeaveRequestsByApprovalLevel = async (req, res) => {
                 approvalLevel: leaveData.approvalLevel,
                 approvalHistory: leaveData.approvalHistory || [],
                 createdAt: leaveData.createdAt,
-                updatedAt: leaveData.updatedAt
+                updatedAt: leaveData.updatedAt,
+                ...(leaveData.requestType === 'hourly' && {
+                    date: leaveData.date || null,
+                    workingShift: leaveData.workingShift || leaveData.shiftName || null,
+                    shiftId: leaveData.shiftId || null,
+                    shiftName: leaveData.shiftName || null,
+                    startTime: leaveData.startTime || null,
+                    endTime: leaveData.endTime || null
+                })
             });
         });
         
