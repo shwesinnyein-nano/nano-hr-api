@@ -365,6 +365,7 @@ const sendLeaveStatusNotification = async (req, res) => {
             firstName,
             lastName,
             positionName,
+            statusName,
             channels = ['in_app', 'push'] // Only free channels
         } = req.body;
 
@@ -395,10 +396,12 @@ const sendLeaveStatusNotification = async (req, res) => {
         const employeeData = employeeDoc.data();
         console.log('📨 employeeData: 1', employeeData);
         // Prepare notification content
-        const title = `Leave Request ${status.charAt(0).toUpperCase() + status.slice(1)}`;
-        const titleTh = `การแจ้งเตือนการขอลา ${status.charAt(0).toUpperCase() + status.slice(1)}`;
-        const message = `Your leave request has been ${statusName}.`;
-        const messageTh = `การขอลา ${statusName} ของคุณได้รับ ${status}. `;
+        const statusLabel = statusName || status.charAt(0).toUpperCase() + status.slice(1);
+        const title = `Leave Request ${statusLabel}`;
+        const titleTh = `การแจ้งเตือนการขอลา ${statusLabel}`;
+        const reasonPart = reason ? ` Reason: ${reason}` : '';
+        const message = `Your leave request has been ${statusLabel}.${reasonPart}`;
+        const messageTh = `การขอลาของคุณได้รับการ${statusLabel}.${reason ? ` เหตุผล: ${reason}` : ''}`;
 
         const results = [];
 
