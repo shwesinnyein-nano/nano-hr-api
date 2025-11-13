@@ -232,7 +232,7 @@ const sendLeaveRequestNotification = async (req, res) => {
     //     });
     // }
 };
-const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+const sendPushNotification1 = async (deviceTokens, title, body, data = {}) => {
     console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
     // try {
         if (!deviceTokens || deviceTokens.length === 0) {
@@ -277,6 +277,76 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
     // }
 };
 
+const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+    console.log('📨 sendPushNotification: 1', deviceTokens, title, body, data);
+  
+    if (!deviceTokens || deviceTokens.length === 0) {
+      console.log('⚠️ No device tokens provided for push notification');
+      return { success: false, message: 'No device tokens provided' };
+    }
+  
+    console.log('📨 FCM tokens:', deviceTokens);
+  
+    // Prepare the message with Android + iOS optimization
+    const message = {
+      tokens: deviceTokens,
+      notification: {
+        title: title,
+        body: body,
+      },
+      data: data,
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'high_importance_channel', // optional, if you defined custom channels
+        },
+      },
+      apns: {
+        headers: {
+          'apns-priority': '10', // 🚀 high priority = immediate delivery
+          'apns-push-type': 'alert', // required for visible notifications on iOS 13+
+        },
+        payload: {
+          aps: {
+            alert: {
+              title: title,
+              body: body,
+            },
+            sound: 'default',
+            badge: 1,
+            contentAvailable: true, // allows background updates
+          },
+        },
+      },
+    };
+  
+    try {
+      const response = await admin.messaging().sendEachForMulticast(message);
+  
+      console.log('📲 Push Notification sent:');
+      console.log(`   ✅ Success Count: ${response.successCount}`);
+      console.log(`   ❌ Failure Count: ${response.failureCount}`);
+  
+      if (response.failureCount > 0) {
+        const failedTokens = response.responses
+          .map((resp, idx) => (resp.success ? null : deviceTokens[idx]))
+          .filter(token => token !== null);
+        console.log('❌ Failed tokens:', failedTokens);
+      }
+  
+      return {
+        success: true,
+        message: 'Push notification sent successfully',
+        successCount: response.successCount,
+        failureCount: response.failureCount,
+      };
+    } catch (error) {
+      console.error('❌ Error sending push notification:', error);
+      throw error;
+    }
+  };
+  
 // Send leave approval/rejection notification (FREE channels only)
 const sendLeaveStatusNotification = async (req, res) => {
     console.log("🚀 Send leave status notification called");
@@ -326,7 +396,9 @@ const sendLeaveStatusNotification = async (req, res) => {
         console.log('📨 employeeData: 1', employeeData);
         // Prepare notification content
         const title = `Leave Request ${status.charAt(0).toUpperCase() + status.slice(1)}`;
-        const message = `Your leave request has been ${status}. ${reason ? `Reason: ${reason}` : ''}`;
+        const titleTh = `การแจ้งเตือนการขอลา ${status.charAt(0).toUpperCase() + status.slice(1)}`;
+        const message = `Your leave request has been ${statusName}.`;
+        const messageTh = `การขอลา ${statusName} ของคุณได้รับ ${status}. `;
 
         const results = [];
 
@@ -487,6 +559,7 @@ const getNotifications = async (req, res) => {
         res.json({
             success: true,
             message: "Notifications retrieved successfully",
+            messageTh: "การแจ้งเตือนการขอลาได้รับการดำเนินการสำเร็จ",
             data: paginatedNotifications,
                     employee: {
                         id: employeeId,
