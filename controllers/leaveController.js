@@ -1242,7 +1242,7 @@ const updateLeaveRequestStatus = async (req, res) => {
         if (status === 'rejected') {
             updateData.rejectedBy = approvedBy; // Store employee ID of rejecter
             updateData.rejectedDate = new Date().toISOString();
-            updateData.rejectedReason = rejectedReason;
+           // updateData.rejectedReason = rejectedReason;
         }
 
         await leaveRequestRef.update(updateData);
@@ -1298,7 +1298,7 @@ const updateLeaveRequestStatus = async (req, res) => {
                                     hrData.uid,
                                     'Leave Request Notification',
                                     `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText}. Please check it out.`,
-                                    
+
                                     //`${approverData.firstName} ${approverData.lastName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
                                     'leave_approved_by_manager',
                                     {
