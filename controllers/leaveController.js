@@ -2,6 +2,11 @@ const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
 const { sendLeaveRequestNotification, sendLeaveStatusNotification, createInAppNotification } = require('./notificationController');
 
+const getEmployeeNotificationChannels = (status) => {
+    const finalStatuses = ['approved', 'rejected', 'cancelled'];
+    return finalStatuses.includes(status) ? ['in_app', 'push'] : ['push'];
+};
+
 // Initialize Firebase Storage with better error handling
 let bucket;
 const initializeFirebaseStorage = async () => {
@@ -1241,6 +1246,7 @@ const updateLeaveRequestStatus = async (req, res) => {
 
         // Send notification to employee about status change (async, don't wait for it)
         try {
+            const employeeStatusForChannel = updateData.status || status;
             sendLeaveStatusNotification({
                 body: {
                     employeeId: leaveData.employeeId,
@@ -1255,7 +1261,7 @@ const updateLeaveRequestStatus = async (req, res) => {
                     firstName: leaveData.firstName,       // From stored data
                     lastName: leaveData.lastName,         // From stored data
                     positionName: leaveData.positionName, // From stored data
-                    channels: ['in_app', 'push'] // Only FREE channels
+                    channels: getEmployeeNotificationChannels(employeeStatusForChannel) // Only FREE channels
                 }
             }, {
                 json: () => {}
@@ -1751,7 +1757,7 @@ const approveLeaveRequest = async (req, res) => {
                     firstName: leaveData.firstName,       // From stored data
                     lastName: leaveData.lastName,         // From stored data
                     positionName: leaveData.positionName, // From stored data
-                    channels: ['in_app', 'push'] // Only FREE channels
+                    channels: getEmployeeNotificationChannels(newStatus) // Only FREE channels
                 }
             }, {
                 json: () => {}
