@@ -119,6 +119,7 @@ const sendLeaveRequestNotification = async (req, res) => {
 
         const employeeData = employeeDoc.data();
         console.log('📨 employeeData: 1', employeeData);
+        console.log('📨 managerId: 1', managerId);
         const managerRef = await findEmployeeDocRef(managerId);
         console.log('📨 managerRef: 1', managerRef);
         if (!managerRef) {
