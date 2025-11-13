@@ -1292,8 +1292,9 @@ const updateLeaveRequestStatus = async (req, res) => {
                                 // Create HR notification
                                 createInAppNotification(
                                     hrData.uid,
-                                    'Manager Approved Leave Request',
-                                    `${approverData.firstName} ${approverData.lastName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
+                                    'Leave Request Notification',
+                                    `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText}. Please check it out.`,
+                                    //`${approverData.firstName} ${approverData.lastName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
                                     'leave_approved_by_manager',
                                     {
                                         leaveRequestId: leaveId, // Include leave request ID for navigation
@@ -1789,9 +1790,9 @@ const approveLeaveRequest = async (req, res) => {
                         // Create HR notification
                         createInAppNotification(
                             hrData.uid,
-                            'Team Lead Approved Leave Request',
-                            `${approverName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
-                            'leave_approved_by_team_lead',
+                            hrNotification.title,
+                            hrNotification.message,
+                            'approved_by_team_lead',
                             {
                                 leaveRequestId: leaveId,
                                 employeeId: leaveData.employeeId,
@@ -1857,8 +1858,8 @@ const approveLeaveRequest = async (req, res) => {
                         // Create HR notification
                         createInAppNotification(
                             hrData.uid,
-                            'Manager Approved Leave Request',
-                            `${approverName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
+                            hrNotification.title,
+                            hrNotification.message,
                             'leave_approved_by_manager',
                             {
                                 leaveRequestId: leaveId, // Include leave request ID for navigation
@@ -1923,11 +1924,11 @@ const approveLeaveRequest = async (req, res) => {
                         // Create Approver notification
                         createInAppNotification(
                             approverData.uid,
-                            'HR Approved Leave Request',
-                            `${hrApproverName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
+                            approverNotification.title,
+                            approverNotification.message,
                             'leave_approved_by_hr',
                             {
-                                leaveRequestId: leaveId,
+                                leaveRequestId: leaveId, // Include leave request ID for navigation
                                 employeeId: leaveData.employeeId,
                                 hrId: userId,
                                 hrName: hrApproverName,
