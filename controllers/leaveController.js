@@ -954,7 +954,82 @@ const createLeaveRequest = async (req, res) => {
 
         console.log(`✅ Leave request created: id=${savedLeaveRequest.id}, employeeId=${savedLeaveRequest.employeeId}, type=${savedLeaveRequest.requestType}, totalDays=${savedLeaveRequest.totalDays}, totalHours=${savedLeaveRequest.totalHours || 0}`);
 
-        // Send response FIRST to give user immediate feedback
+        // ✅ CRITICAL FIX: Send notifications BEFORE response
+        // On Vercel serverless, functions terminate after response, killing background work
+        // Sending notifications first ensures they complete before function ends
+        // Skip notification if auto-approved (firstApprover is null)
+        if (firstApprover !== null) {
+            try {
+                console.log(`📨 [NOTIFICATION] Starting notification process for ${firstApprover}...`);
+                const employeeDisplayName = employeeName || [firstName, lastName].filter(Boolean).join(' ').trim() || employeeId;
+                const notificationFromDate = requestType === 'hourly' ? (date || fromDate) : fromDate;
+                const notificationToDate = requestType === 'hourly' ? (date || toDate) : toDate;
+                const { title: approverTitle, message: approverMessage } = buildApproverNotificationContent(firstApprover, {
+                    employeeName: employeeDisplayName,
+                    leaveTypeName,
+                    leaveTypeNameEng,
+                    fromDate: notificationFromDate,
+                    toDate: notificationToDate
+                });
+                
+                const approverIds = await findApproverIdsByLevel(firstApprover, employeeId, finalBranch);
+                console.log(`📨 [NOTIFICATION] Found ${approverIds.length} approver(s) for level "${firstApprover}"`);
+                
+                if (approverIds.length > 0) {
+                    // Fetch all approver data once to get device tokens
+                    const approverDocs = await Promise.all(
+                        approverIds.map(async (approverId) => {
+                            const approverRef = await findEmployeeDocRef(approverId);
+                            if (approverRef) {
+                                const doc = await approverRef.get();
+                                if (doc.exists) {
+                                    return { id: approverId, data: doc.data() };
+                                }
+                            }
+                            return { id: approverId, data: null };
+                        })
+                    );
+                    
+                    // Send notifications to all approvers (await to ensure they're sent)
+                    const notificationPromises = approverDocs
+                        .filter(({ data }) => data !== null)
+                        .map(({ id: approverId, data: approverData }) => {
+                            console.log(`📨 [NOTIFICATION] Sending notification to ${approverId}...`);
+                            return sendLeaveRequestNotificationToApprover(approverId, {
+                                title: approverTitle,
+                                message: approverMessage,
+                                employeeId: employeeId,
+                                leaveRequestId: leaveRequestId,
+                                leaveType: leaveTypeName || leaveType,
+                                leaveTypeNameEng: leaveTypeNameEng,
+                                fromDate: notificationFromDate || notificationToDate,
+                                toDate: notificationToDate || notificationFromDate,
+                                reason: reason
+                            }, approverData.deviceTokens || []).then(result => {
+                                console.log(`✅ [NOTIFICATION] Notification sent to ${approverId}:`, result.success ? 'SUCCESS' : 'FAILED');
+                                return result;
+                            }).catch(notifError => {
+                                console.error(`❌ [NOTIFICATION] Failed to send to ${approverId}:`, notifError.message);
+                                return { success: false, error: notifError.message };
+                            });
+                        });
+                    
+                    // Wait for all notifications to be sent (with timeout to prevent hanging)
+                    await Promise.allSettled(notificationPromises);
+                    console.log(`✅ [NOTIFICATION] All notifications processed`);
+                } else {
+                    console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
+                }
+            } catch (notifError) {
+                console.error("❌ [NOTIFICATION] Error sending notification:", notifError);
+                // Don't fail the request if notifications fail
+            }
+        } else {
+            console.log(`✅ [NOTIFICATION] Leave request auto-approved, no notification needed`);
+        }
+
+        // Send response AFTER notifications are sent
+        // This ensures notifications complete before Vercel function terminates
         res.json({
             success: true,
             message: "Leave request created successfully",
@@ -993,80 +1068,6 @@ const createLeaveRequest = async (req, res) => {
                 })
             }
         });
-
-        // ✅ Send notifications IMMEDIATELY after response (fire-and-forget)
-        // Start notification process right after response is sent
-        // This works whether user stays on page or navigates away
-        // Skip notification if auto-approved (firstApprover is null)
-        if (firstApprover !== null) {
-            // Don't await - let it run in background
-            (async () => {
-                try {
-                    console.log(`📨 [NOTIFICATION] Starting notification process for ${firstApprover}...`);
-                    const employeeDisplayName = employeeName || [firstName, lastName].filter(Boolean).join(' ').trim() || employeeId;
-                    const notificationFromDate = requestType === 'hourly' ? (date || fromDate) : fromDate;
-                    const notificationToDate = requestType === 'hourly' ? (date || toDate) : toDate;
-                    const { title: approverTitle, message: approverMessage } = buildApproverNotificationContent(firstApprover, {
-                        employeeName: employeeDisplayName,
-                        leaveTypeName,
-                        leaveTypeNameEng,
-                        fromDate: notificationFromDate,
-                        toDate: notificationToDate
-                    });
-                    
-                    const approverIds = await findApproverIdsByLevel(firstApprover, employeeId, finalBranch);
-                    console.log(`📨 [NOTIFICATION] Found ${approverIds.length} approver(s) for level "${firstApprover}"`);
-                    
-                    if (approverIds.length === 0) {
-                        console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
-                        return;
-                    }
-                    
-                    // Fetch all approver data once to get device tokens
-                    const approverDocs = await Promise.all(
-                        approverIds.map(async (approverId) => {
-                            const approverRef = await findEmployeeDocRef(approverId);
-                            if (approverRef) {
-                                const doc = await approverRef.get();
-                                if (doc.exists) {
-                                    return { id: approverId, data: doc.data() };
-                                }
-                            }
-                            return { id: approverId, data: null };
-                        })
-                    );
-                    
-                    // Send notifications to all approvers (fire-and-forget)
-                    for (const { id: approverId, data: approverData } of approverDocs) {
-                        if (!approverData) {
-                            console.warn(`⚠️ Approver data not found for ${approverId}, skipping notification`);
-                            continue;
-                        }
-                        
-                        console.log(`📨 [NOTIFICATION] Sending notification to ${approverId}...`);
-                        sendLeaveRequestNotificationToApprover(approverId, {
-                            title: approverTitle,
-                            message: approverMessage,
-                            employeeId: employeeId,
-                            leaveRequestId: leaveRequestId,
-                            leaveType: leaveTypeName || leaveType,
-                            leaveTypeNameEng: leaveTypeNameEng,
-                            fromDate: notificationFromDate || notificationToDate,
-                            toDate: notificationToDate || notificationFromDate,
-                            reason: reason
-                        }, approverData.deviceTokens || []).then(result => {
-                            console.log(`✅ [NOTIFICATION] Notification sent to ${approverId}:`, result.success ? 'SUCCESS' : 'FAILED');
-                        }).catch(notifError => {
-                            console.error(`❌ [NOTIFICATION] Failed to send to ${approverId}:`, notifError.message);
-                        });
-                    }
-                } catch (notifError) {
-                    console.error("❌ [NOTIFICATION] Error sending notification:", notifError);
-                }
-            })();
-        } else {
-            console.log(`✅ [NOTIFICATION] Leave request auto-approved, no notification needed`);
-        }
 
     } catch (error) {
         console.error("❌ Error creating leave request:", error);
