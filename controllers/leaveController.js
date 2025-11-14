@@ -596,7 +596,7 @@ const createLeaveRequest = async (req, res) => {
                 positionName = positionName || doc.positionName || '';
             }
         }
-       // console.log('📨 createLeaveRequest: 5', employerDoc);
+       
 
 
         // Support legacy / snake_case payload keys from the client
@@ -973,36 +973,30 @@ const createLeaveRequest = async (req, res) => {
                     console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
                 }
             
-            // Send notifications to all found approvers
+            // Send notifications to all found approvers using simplified function
             if (approverIds && approverIds.length > 0) {
-                console.log('📨 approverIds: 2', approverIds);
+                console.log(`📨 Sending notifications to ${approverIds.length} approver(s) for level "${firstApprover}"`);
                 for (const approverId of approverIds) {
-                    console.log('📨 approverId: 3', approverId);
-                    sendLeaveRequestNotification({
-                        body: {
-                            employeeId: employeeId,
-                            leaveRequestId: leaveRequestId,
-                            leaveType: leaveTypeName,
-                            leaveTypeNameEng,
-                            fromDate: notificationFromDate || notificationToDate,
-                            toDate: notificationToDate || notificationFromDate,
-                            reason: reason,
-                            managerId: approverId,  // Keep field name for compatibility
-                            approverLevel: firstApprover,  // Add which level this is
-                            channels: ['in_app', 'push'],
-                            titleOverride: approverTitle,
-                            messageOverride: approverMessage
-                        }
-                    }, 
-                    {
-                        json: () => {}
+                    console.log(`📨 Sending notification to approver ${approverId}...`);
+                    // Use simplified function - direct employee ID targeting
+                    sendLeaveRequestNotificationToApprover(approverId, {
+                        title: approverTitle,
+                        message: approverMessage,
+                        employeeId: employeeId,
+                        leaveRequestId: leaveRequestId,
+                        leaveType: leaveTypeName || leaveType,
+                        leaveTypeNameEng: leaveTypeNameEng,
+                        fromDate: notificationFromDate || notificationToDate,
+                        toDate: notificationToDate || notificationFromDate,
+                        reason: reason
+                    }).then(result => {
+                        console.log(`✅ Notification result for ${approverId}:`, result);
                     }).catch(notifError => {
                         console.error(`❌ Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
                     });
-
-                  
                 }
             } else {
+                console.warn(`⚠️ No approvers found for level "${firstApprover}"`);
             }
         } catch (notifError) {
             console.error("❌ Error sending notification:", notifError);

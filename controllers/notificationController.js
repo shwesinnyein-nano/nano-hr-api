@@ -392,20 +392,53 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
         const response = await admin.messaging().sendEachForMulticast(message);
         
         console.log(`📲 Push Notification sent:`);
-        console.log(`   Success Count: ${response.successCount}`);
-        console.log(`   Failure Count: ${response.failureCount}`);
+        console.log(`   ✅ Success Count: ${response.successCount}`);
+        console.log(`   ❌ Failure Count: ${response.failureCount}`);
         
         if (response.failureCount > 0) {
-            console.log('❌ Failed tokens:', response.responses
-                .map((resp, idx) => resp.success ? null : sanitizedTokens[idx])
-                .filter(token => token !== null));
+            const failedTokens = [];
+            const failedReasons = [];
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    const token = sanitizedTokens[idx];
+                    failedTokens.push(token);
+                    failedReasons.push({
+                        token: token ? `${token.substring(0, 20)}...` : 'unknown',
+                        error: resp.error ? resp.error.code : 'unknown',
+                        message: resp.error ? resp.error.message : 'unknown'
+                    });
+                }
+            });
+            console.log('❌ Failed tokens:', failedTokens);
+            console.log('❌ Failure details:', JSON.stringify(failedReasons, null, 2));
+        }
+        
+        if (response.successCount > 0) {
+            const successfulTokens = [];
+            response.responses.forEach((resp, idx) => {
+                if (resp.success) {
+                    const token = sanitizedTokens[idx];
+                    successfulTokens.push(token ? `${token.substring(0, 20)}...` : 'unknown');
+                }
+            });
+            console.log(`✅ Successfully sent to ${response.successCount} token(s)`);
         }
         
         return { 
-            success: true, 
-            message: 'Push notification sent successfully',
+            success: response.successCount > 0, 
+            message: response.successCount > 0 
+                ? 'Push notification sent successfully' 
+                : 'All push notifications failed',
             successCount: response.successCount,
-            failureCount: response.failureCount
+            failureCount: response.failureCount,
+            responses: response.responses.map((resp, idx) => ({
+                token: sanitizedTokens[idx] ? `${sanitizedTokens[idx].substring(0, 20)}...` : 'unknown',
+                success: resp.success,
+                error: resp.error ? {
+                    code: resp.error.code,
+                    message: resp.error.message
+                } : null
+            }))
         };
     // } catch (error) {
     //     console.error('❌ Error sending push notification:', error);
