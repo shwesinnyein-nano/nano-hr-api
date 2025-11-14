@@ -1059,15 +1059,22 @@ const findEmployeeDocRefs = async (employeeId) => {
 const registerDevice = async (req, res) => {
     try {
         const { employeeId, token, platform, appVersion } = req.body || {};
+        
+        console.log(`[REGISTER] Registration request received for employeeId: ${employeeId}, platform: ${platform}`);
+        
         if (!employeeId || !token) {
+            console.warn(`[REGISTER] Missing required fields - employeeId: ${!!employeeId}, token: ${!!token}`);
             return res.status(400).json({ success: false, message: 'employeeId and token are required' });
         }
 
         // Validate token before processing
         const trimmedToken = typeof token === 'string' ? token.trim() : '';
         if (!trimmedToken || trimmedToken.length === 0) {
+            console.warn(`[REGISTER] Empty or invalid token format`);
             return res.status(400).json({ success: false, message: 'Invalid token: empty or invalid format' });
         }
+
+        console.log(`[REGISTER] Token length: ${trimmedToken.length}, first 30 chars: ${trimmedToken.substring(0, 30)}...`);
 
         // Validate token format - reject invalid tokens early
         if (trimmedToken.startsWith('c_')) {
@@ -1088,8 +1095,11 @@ const registerDevice = async (req, res) => {
 
         const empRef = await findEmployeeDocRef(employeeId);
         if (!empRef) {
+            console.warn(`[REGISTER] Employee not found: ${employeeId}`);
             return res.status(404).json({ success: false, message: 'Employee not found' });
         }
+
+        console.log(`[REGISTER] Employee found, proceeding with registration...`);
 
         const normalizedPlatform = (platform || 'unknown').toLowerCase();
         const nowIso = new Date().toISOString();
@@ -1134,58 +1144,67 @@ const registerDevice = async (req, res) => {
                     },
                     { merge: true }
                 );
-                return; // Early return - token already exists, no changes needed
-            }
+                // Don't return here - we still need to send response to client
+                console.log(`[REGISTER] Updated existing device record for ${employeeId}`);
+            } else {
+                console.log(`[REGISTER] New token registration - token exists: ${tokenAlreadyExists}, device exists: ${!!existingDeviceForPlatform}`);
 
-            // Remove old tokens for same platform (replace, don't accumulate)
-            const filteredTokens = existingDeviceTokens.filter(t => {
-                // Keep tokens that don't match the new token
-                return t !== trimmedToken;
-            });
-            
-            // Add new token (if not already present)
-            if (!filteredTokens.includes(trimmedToken)) {
-                filteredTokens.push(trimmedToken);
-            }
-
-            // Remove old devices for same platform, keep others
-            const filteredDevices = existingDevices.filter(device => {
-                if (!device || typeof device !== 'object') return false;
-                if (!device.token || typeof device.token !== 'string') return false;
+                // Remove old tokens for same platform (replace, don't accumulate)
+                const filteredTokens = existingDeviceTokens.filter(t => {
+                    // Keep tokens that don't match the new token
+                    return t !== trimmedToken;
+                });
                 
-                // Remove devices with same platform but different token
-                if (device.platform === normalizedPlatform && device.token !== trimmedToken) {
-                    return false; // Remove old device for this platform
+                // Add new token (if not already present)
+                if (!filteredTokens.includes(trimmedToken)) {
+                    filteredTokens.push(trimmedToken);
+                    console.log(`[REGISTER] Added new token to deviceTokens array`);
                 }
-                
-                // Remove device with same token (will be replaced)
-                if (device.token === trimmedToken) {
-                    return false;
-                }
-                
-                return true; // Keep other devices
-            });
 
-            // Add new device
-            filteredDevices.push({
-                token: trimmedToken,
-                platform: normalizedPlatform,
-                appVersion: appVersion || '',
-                registeredAt: nowIso,
-                lastSeen: nowIso
-            });
+                // Remove old devices for same platform, keep others
+                const filteredDevices = existingDevices.filter(device => {
+                    if (!device || typeof device !== 'object') return false;
+                    if (!device.token || typeof device.token !== 'string') return false;
+                    
+                    // Remove devices with same platform but different token
+                    if (device.platform === normalizedPlatform && device.token !== trimmedToken) {
+                        console.log(`[REGISTER] Removing old device for platform ${normalizedPlatform} with different token`);
+                        return false; // Remove old device for this platform
+                    }
+                    
+                    // Remove device with same token (will be replaced)
+                    if (device.token === trimmedToken) {
+                        console.log(`[REGISTER] Removing old device record with same token`);
+                        return false;
+                    }
+                    
+                    return true; // Keep other devices
+                });
 
-            transaction.set(
-                empRef,
-                {
-                    deviceTokens: filteredTokens,
-                    devices: filteredDevices,
-                    updatedAt: nowIso
-                },
-                { merge: true }
-            );
+                // Add new device
+                filteredDevices.push({
+                    token: trimmedToken,
+                    platform: normalizedPlatform,
+                    appVersion: appVersion || '',
+                    registeredAt: nowIso,
+                    lastSeen: nowIso
+                });
+
+                console.log(`[REGISTER] Registering new device - Total tokens: ${filteredTokens.length}, Total devices: ${filteredDevices.length}`);
+
+                transaction.set(
+                    empRef,
+                    {
+                        deviceTokens: filteredTokens,
+                        devices: filteredDevices,
+                        updatedAt: nowIso
+                    },
+                    { merge: true }
+                );
+            }
         });
 
+        console.log(`[REGISTER] ✅ Successfully registered device for ${employeeId} on ${normalizedPlatform}`);
         return res.json({ success: true, message: 'Device registered' });
     } catch (err) {
         console.error('❌ registerDevice error:', err);
