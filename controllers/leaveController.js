@@ -994,15 +994,15 @@ const createLeaveRequest = async (req, res) => {
             }
         });
 
-        // ✅ FIX: Send notifications IMMEDIATELY after response (fire-and-forget)
-        // res.json() sends response synchronously, so we can send notifications right after
+        // ✅ Send notifications IMMEDIATELY after response (fire-and-forget)
+        // Start notification process right after response is sent
         // This works whether user stays on page or navigates away
         // Skip notification if auto-approved (firstApprover is null)
         if (firstApprover !== null) {
-            // Use setImmediate to ensure response is sent first, then trigger notifications
-            // This prevents any blocking and ensures notifications always send
+            // Don't await - let it run in background
             (async () => {
                 try {
+                    console.log(`📨 [NOTIFICATION] Starting notification process for ${firstApprover}...`);
                     const employeeDisplayName = employeeName || [firstName, lastName].filter(Boolean).join(' ').trim() || employeeId;
                     const notificationFromDate = requestType === 'hourly' ? (date || fromDate) : fromDate;
                     const notificationToDate = requestType === 'hourly' ? (date || toDate) : toDate;
@@ -1015,14 +1015,14 @@ const createLeaveRequest = async (req, res) => {
                     });
                     
                     const approverIds = await findApproverIdsByLevel(firstApprover, employeeId, finalBranch);
-                    console.log(`📨 [NOTIFICATION] Sending notifications to ${approverIds.length} approver(s) for level "${firstApprover}"`);
+                    console.log(`📨 [NOTIFICATION] Found ${approverIds.length} approver(s) for level "${firstApprover}"`);
                     
                     if (approverIds.length === 0) {
                         console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
                         return;
                     }
                     
-                    // Fetch all approver data once to get device tokens (avoid re-fetching in notification function)
+                    // Fetch all approver data once to get device tokens
                     const approverDocs = await Promise.all(
                         approverIds.map(async (approverId) => {
                             const approverRef = await findEmployeeDocRef(approverId);
@@ -1055,15 +1055,15 @@ const createLeaveRequest = async (req, res) => {
                             toDate: notificationToDate || notificationFromDate,
                             reason: reason
                         }, approverData.deviceTokens || []).then(result => {
-                            console.log(`✅ [NOTIFICATION] Notification result for ${approverId}:`, result);
+                            console.log(`✅ [NOTIFICATION] Notification sent to ${approverId}:`, result.success ? 'SUCCESS' : 'FAILED');
                         }).catch(notifError => {
-                            console.error(`❌ [NOTIFICATION] Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
+                            console.error(`❌ [NOTIFICATION] Failed to send to ${approverId}:`, notifError.message);
                         });
                     }
                 } catch (notifError) {
                     console.error("❌ [NOTIFICATION] Error sending notification:", notifError);
                 }
-            })(); // Immediately invoke async function (fire-and-forget)
+            })();
         } else {
             console.log(`✅ [NOTIFICATION] Leave request auto-approved, no notification needed`);
         }
