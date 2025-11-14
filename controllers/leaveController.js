@@ -1,6 +1,6 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
-const { sendLeaveRequestNotification, sendLeaveStatusNotification, createInAppNotification } = require('./notificationController');
+const { sendLeaveRequestNotification, sendLeaveRequestNotificationToApprover, sendLeaveStatusNotification, createInAppNotification } = require('./notificationController');
 
 const getEmployeeNotificationChannels = (status) => {
     const finalStatuses = ['approved', 'rejected', 'cancelled'];
@@ -1969,6 +1969,37 @@ const approveLeaveRequest = async (req, res) => {
             }
         } catch (notifError) {
             console.error("❌ Error sending notifications:", notifError);
+        }
+
+        // NEW: Send notification to specific next approver(s) based on nextApprover level
+        // Uses simplified function that takes approver employee ID directly
+        if (action === 'approve' && nextApprover) {
+            try {
+                const approverIds = await findApproverIdsByLevel(nextApprover, leaveData.employeeId);
+                
+                if (approverIds && approverIds.length > 0) {
+                    const approverNotification = buildApproverNotificationContent(nextApprover, notificationBase);
+                    
+                    for (const approverId of approverIds) {
+                        // Use simplified function - just pass approver ID and notification content
+                        sendLeaveRequestNotificationToApprover(approverId, {
+                            title: approverNotification.title,
+                            message: approverNotification.message,
+                            employeeId: leaveData.employeeId,
+                            leaveRequestId: leaveId,
+                            leaveType: leaveData.leaveTypeName || leaveData.leaveType,
+                            leaveTypeNameEng: leaveData.leaveTypeNameEng,
+                            fromDate: leaveData.fromDate || leaveData.date,
+                            toDate: leaveData.toDate || leaveData.date,
+                            reason: comment || leaveData.reason
+                        }).catch(err => {
+                            console.error(`❌ Failed to send notification to ${nextApprover} ${approverId}:`, err);
+                        });
+                    }
+                }
+            } catch (nextApproverError) {
+                console.error("❌ Error sending notification to next approver:", nextApproverError);
+            }
         }
         
         res.json({

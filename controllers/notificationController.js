@@ -102,33 +102,38 @@ const sendLeaveRequestNotification = async (req, res) => {
             titleOverride,
             messageOverride
         } = req.body;
-        const employeeRef = await findEmployeeDocRef(employeeId);
-        console.log('📨 employeeRef: 1', employeeRef);
-        if (!employeeRef) {
-            return safeStatusJson(res, 404, { success: false, message: "Employee not found" });
+        
+        // Only fetch employee data if we need it for default message (no overrides provided)
+        let employeeData = null;
+        if (!titleOverride || !messageOverride) {
+            const employeeRef = await findEmployeeDocRef(employeeId);
+            if (employeeRef) {
+                const employeeDoc = await employeeRef.get();
+                if (employeeDoc.exists) {
+                    employeeData = employeeDoc.data();
+                }
+            }
         }
-        const employeeDoc = await employeeRef.get();
 
-        console.log('📨 employeeDoc: 1', employeeDoc);
-        if (!employeeDoc.exists) {
-            return safeStatusJson(res, 404, {
-                success: false,
-                message: "Employee not found"
+        const managerRef = await findEmployeeDocRef(managerId);
+        if (!managerRef) {
+            console.warn(`⚠️ Approver not found: ${managerId}`);
+            return safeJson(res, {
+                success: true,
+                message: "Approver not found - no notifications sent",
+                results: []
             });
         }
-
-        const employeeData = employeeDoc.data();
-        console.log('📨 employeeData: 1', employeeData);
-        console.log('📨 managerId: 1', managerId);
-        const managerRef = await findEmployeeDocRef(managerId);
-        console.log('📨 managerRef: 1', managerRef);
-        if (!managerRef) {
-            return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
-        }
         const managerSnap = await managerRef.get();
-        console.log('📨 managerSnap: 1', managerSnap);
+        if (!managerSnap.exists) {
+            console.warn(`⚠️ Approver document does not exist: ${managerId}`);
+            return safeJson(res, {
+                success: true,
+                message: "Approver not found - no notifications sent",
+                results: []
+            });
+        }
         const manager = managerSnap.data();
-        console.log('📨 manager: 1', manager);
         // if (!manager) {
         //     return safeStatusJson(res, 404, { success: false, message: "Manager not found" });
         // }
@@ -140,7 +145,10 @@ const sendLeaveRequestNotification = async (req, res) => {
         // }
 
         // Prepare notification content
-        const defaultTitle = `New Leave Request from ${employeeData.firstName} ${employeeData.lastName}`;
+        const employeeName = employeeData 
+            ? `${employeeData.firstName} ${employeeData.lastName}`
+            : employeeId || 'An employee';
+        const defaultTitle = `New Leave Request from ${employeeName}`;
         const dateRange = (() => {
             if (fromDate && toDate) {
                 if (fromDate === toDate) return fromDate;
@@ -149,7 +157,7 @@ const sendLeaveRequestNotification = async (req, res) => {
             return fromDate || toDate || '';
         })();
         const leaveLabel = leaveTypeNameEng ? `${leaveTypeNameEng} (${leaveType})` : leaveType;
-        const defaultMessage = `${employeeData.firstName} ${employeeData.lastName} has requested ${leaveLabel} leave${dateRange ? ` (${dateRange})` : ''}.${reason ? ` Reason: ${reason}` : ''}`;
+        const defaultMessage = `${employeeName} has requested ${leaveLabel} leave${dateRange ? ` (${dateRange})` : ''}.${reason ? ` Reason: ${reason}` : ''}`;
         const title = titleOverride || defaultTitle;
         const message = messageOverride || defaultMessage;
 
@@ -233,6 +241,93 @@ const sendLeaveRequestNotification = async (req, res) => {
     //     });
     // }
 };
+
+// NEW: Simplified version - send notification to specific approver by employee ID
+// Takes approver employee ID and notification content directly
+const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
+    title,
+    message,
+    employeeId,
+    leaveRequestId,
+    leaveType,
+    leaveTypeNameEng,
+    fromDate,
+    toDate,
+    reason
+}) => {
+    try {
+        // Get approver's data (for device tokens)
+        const approverRef = await findEmployeeDocRef(approverEmployeeId);
+        if (!approverRef) {
+            console.warn(`⚠️ Approver not found: ${approverEmployeeId}`);
+            return { success: false, message: "Approver not found" };
+        }
+
+        const approverDoc = await approverRef.get();
+        if (!approverDoc.exists) {
+            console.warn(`⚠️ Approver document does not exist: ${approverEmployeeId}`);
+            return { success: false, message: "Approver document not found" };
+        }
+
+        const approverData = approverDoc.data();
+        const results = [];
+
+        // Send push notification
+        const deviceTokens = approverData.deviceTokens || [];
+        const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
+        
+        if (sanitizedTokens.length > 0) {
+            const pushResult = await sendPushNotification(
+                sanitizedTokens,
+                title,
+                message,
+                {
+                    type: 'leave_request',
+                    employeeId: employeeId,
+                    leaveRequestId: leaveRequestId,
+                    leaveType: leaveType,
+                    leaveTypeNameEng: leaveTypeNameEng
+                }
+            );
+            results.push({ channel: 'push', ...pushResult });
+        } else {
+            results.push({ channel: 'push', success: false, message: 'No device tokens found' });
+        }
+
+        // Send in-app notification
+        const inAppResult = await createInAppNotification(
+            approverEmployeeId,
+            title,
+            message,
+            NOTIFICATION_TYPES.LEAVE_REQUEST,
+            {
+                employeeId,
+                leaveRequestId,
+                leaveType,
+                leaveTypeNameEng,
+                fromDate,
+                toDate,
+                reason
+            }
+        );
+        results.push({ channel: 'in_app', notification: inAppResult });
+
+        return {
+            success: true,
+            message: "Notification sent to approver",
+            results: results
+        };
+
+    } catch (error) {
+        console.error(`❌ Error sending notification to approver ${approverEmployeeId}:`, error);
+        return {
+            success: false,
+            message: "Failed to send notification",
+            error: error.message
+        };
+    }
+};
+
 const sanitizeDeviceTokens = (tokens = []) => {
     if (!Array.isArray(tokens)) return [];
     return Array.from(
@@ -748,6 +843,7 @@ const markNotificationAsRead = async (req, res) => {
 
 module.exports = {
     sendLeaveRequestNotification,
+    sendLeaveRequestNotificationToApprover, // NEW: Simplified version
     sendLeaveStatusNotification,
     getNotifications, // Unified API
     markNotificationAsRead,
