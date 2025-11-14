@@ -1063,6 +1063,29 @@ const registerDevice = async (req, res) => {
             return res.status(400).json({ success: false, message: 'employeeId and token are required' });
         }
 
+        // Validate token before processing
+        const trimmedToken = typeof token === 'string' ? token.trim() : '';
+        if (!trimmedToken || trimmedToken.length === 0) {
+            return res.status(400).json({ success: false, message: 'Invalid token: empty or invalid format' });
+        }
+
+        // Validate token format - reject invalid tokens early
+        if (trimmedToken.startsWith('c_')) {
+            console.warn(`[REGISTER] Rejecting invalid token (starts with 'c_'): ${trimmedToken.substring(0, 30)}...`);
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Invalid token format. Please re-register your device.' 
+            });
+        }
+
+        if (trimmedToken.length < 140) {
+            console.warn(`[REGISTER] Rejecting invalid token (too short): ${trimmedToken.length} chars`);
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Invalid token format. Token too short.' 
+            });
+        }
+
         const empRef = await findEmployeeDocRef(employeeId);
         if (!empRef) {
             return res.status(404).json({ success: false, message: 'Employee not found' });
@@ -1074,7 +1097,7 @@ const registerDevice = async (req, res) => {
         await db.runTransaction(async (transaction) => {
             const snap = await transaction.get(empRef);
             const existingData = snap.exists ? snap.data() : {};
-
+            
             const existingDeviceTokens = Array.isArray(existingData.deviceTokens)
                 ? existingData.deviceTokens
                 : [];
@@ -1082,37 +1105,80 @@ const registerDevice = async (req, res) => {
                 ? existingData.devices
                 : [];
 
-            const dedupedTokens = Array.from(
-                new Set(
-                    existingDeviceTokens
-                        .concat(token)
-                        .filter(t => typeof t === 'string' && t.trim().length > 0)
-                        .map(t => t.trim())
-                )
+            // Check if token already exists (avoid unnecessary updates)
+            const tokenAlreadyExists = existingDeviceTokens.includes(trimmedToken);
+            const existingDeviceForPlatform = existingDevices.find(d => 
+                d && d.token === trimmedToken && d.platform === normalizedPlatform
             );
 
+            // If token and platform already exist, just update lastSeen (don't create duplicate or change registeredAt)
+            if (tokenAlreadyExists && existingDeviceForPlatform) {
+                console.log(`[REGISTER] Token already registered for ${employeeId} on ${normalizedPlatform} - updating lastSeen only`);
+                // Update existing device record - keep original registeredAt, update lastSeen
+                const updatedDevices = existingDevices.map(device => {
+                    if (device && device.token === trimmedToken && device.platform === normalizedPlatform) {
+                        return {
+                            ...device,
+                            appVersion: appVersion || device.appVersion || '',
+                            lastSeen: nowIso // Only update lastSeen, keep original registeredAt
+                        };
+                    }
+                    return device;
+                });
+                
+                transaction.set(
+                    empRef,
+                    {
+                        devices: updatedDevices,
+                        updatedAt: nowIso
+                    },
+                    { merge: true }
+                );
+                return; // Early return - token already exists, no changes needed
+            }
+
+            // Remove old tokens for same platform (replace, don't accumulate)
+            const filteredTokens = existingDeviceTokens.filter(t => {
+                // Keep tokens that don't match the new token
+                return t !== trimmedToken;
+            });
+            
+            // Add new token (if not already present)
+            if (!filteredTokens.includes(trimmedToken)) {
+                filteredTokens.push(trimmedToken);
+            }
+
+            // Remove old devices for same platform, keep others
             const filteredDevices = existingDevices.filter(device => {
                 if (!device || typeof device !== 'object') return false;
                 if (!device.token || typeof device.token !== 'string') return false;
-
-                const sameToken = device.token === token;
-                const samePlatform = device.platform && device.platform.toLowerCase() === normalizedPlatform;
-
-                // keep device records that don't match platform/token combo
-                return !sameToken && !samePlatform;
+                
+                // Remove devices with same platform but different token
+                if (device.platform === normalizedPlatform && device.token !== trimmedToken) {
+                    return false; // Remove old device for this platform
+                }
+                
+                // Remove device with same token (will be replaced)
+                if (device.token === trimmedToken) {
+                    return false;
+                }
+                
+                return true; // Keep other devices
             });
 
+            // Add new device
             filteredDevices.push({
-                token,
+                token: trimmedToken,
                 platform: normalizedPlatform,
                 appVersion: appVersion || '',
-                registeredAt: nowIso
+                registeredAt: nowIso,
+                lastSeen: nowIso
             });
 
             transaction.set(
                 empRef,
                 {
-                    deviceTokens: dedupedTokens,
+                    deviceTokens: filteredTokens,
                     devices: filteredDevices,
                     updatedAt: nowIso
                 },
