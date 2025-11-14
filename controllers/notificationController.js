@@ -353,7 +353,30 @@ const sanitizeDeviceTokens = (tokens = []) => {
         new Set(
             tokens
                 .map(token => (typeof token === 'string' ? token.trim() : ''))
-                .filter(token => token.length > 0)
+                .filter(token => {
+                    // Filter out empty tokens
+                    if (token.length === 0) return false;
+                    
+                    // Basic FCM token validation
+                    // Valid FCM tokens are typically:
+                    // - Android: 152+ chars, contain ':APA' pattern
+                    // - iOS: 163+ chars, no ':APA' pattern, base64-like characters
+                    // - Minimum length should be at least 100 chars
+                    if (token.length < 100) {
+                        console.warn(`[FCM] Invalid token (too short): ${token.substring(0, 20)}... (${token.length} chars)`);
+                        return false;
+                    }
+                    
+                    // Check for obviously invalid patterns
+                    // FCM tokens shouldn't start with weird prefixes like 'c_'
+                    // Valid tokens usually start with alphanumeric or have specific patterns
+                    if (token.startsWith('c_') || token.length < 140) {
+                        console.warn(`[FCM] Suspicious token format: ${token.substring(0, 30)}... (${token.length} chars)`);
+                        // Still allow it, but log warning
+                    }
+                    
+                    return true;
+                })
         )
     );
 };
@@ -409,16 +432,53 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             response = await admin.messaging().sendEachForMulticast(message);
             
             if (response.failureCount > 0) {
+                const invalidTokens = [];
                 response.responses.forEach((resp, idx) => {
                     if (!resp.success) {
                         const token = sanitizedTokens[idx];
-                        console.error(`[FCM] ❌ Failed token ${token ? token.substring(0, 20) + '...' : 'unknown'}: ${resp.error?.code || 'unknown'} - ${resp.error?.message || 'unknown'}`);
+                        const errorCode = resp.error?.code || 'unknown';
+                        const errorMessage = resp.error?.message || 'unknown';
+                        console.error(`[FCM] ❌ Failed token ${token ? token.substring(0, 30) + '...' : 'unknown'}: ${errorCode} - ${errorMessage}`);
+                        
+                        // Track invalid tokens for cleanup
+                        if (errorCode === 'messaging/invalid-argument' || 
+                            errorCode === 'messaging/registration-token-not-registered' ||
+                            errorCode === 'messaging/invalid-registration-token') {
+                            invalidTokens.push({ token, errorCode, errorMessage });
+                        }
                     }
                 });
+                
+                if (invalidTokens.length > 0) {
+                    console.warn(`[FCM] ⚠️ Found ${invalidTokens.length} invalid token(s) that should be removed from database`);
+                    console.warn(`[FCM] Invalid tokens:`, invalidTokens.map(t => t.token.substring(0, 30) + '...'));
+                }
             }
             
             if (response.successCount > 0) {
+                console.log('📨 response: 1', response);
                 console.log(`[FCM] ✅ Sent to ${response.successCount} device(s) | ❌ ${response.failureCount} failed`);
+                
+                // Log token details for debugging
+                response.responses.forEach((resp, idx) => {
+                    if (resp.success && sanitizedTokens[idx]) {
+                        const token = sanitizedTokens[idx];
+                        console.log(`[FCM] Token ${idx + 1}: ${token.substring(0, 30)}... (${token.length} chars)`);
+                        // Check token format - iOS FCM tokens are typically 163 chars, Android are 152+
+                        const isLikelyIOS = token.length > 150 && !token.includes(':APA');
+                        const isLikelyAndroid = token.includes(':APA91') || token.includes(':APA91b');
+                        console.log(`[FCM] Token format: ${isLikelyIOS ? 'iOS' : isLikelyAndroid ? 'Android' : 'Unknown'}`);
+                    }
+                });
+                
+                // Log payload being sent
+                console.log(`[FCM] Payload sent:`, JSON.stringify({
+                    notification: { title: title, body: body },
+                    apns: {
+                        headers: message.apns?.headers,
+                        payload: message.apns?.payload
+                    }
+                }, null, 2));
             } else {
                 console.error(`[FCM] ❌ All ${response.failureCount} notification(s) failed`);
             }
