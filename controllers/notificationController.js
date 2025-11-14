@@ -532,10 +532,18 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
                         console.error(`[FCM] ❌ Failed token ${token ? token.substring(0, 30) + '...' : 'unknown'}: ${errorCode} - ${errorMessage}`);
                         
                         // Track invalid tokens for cleanup
+                        // ✅ Only remove tokens for DEFINITIVE errors (actually invalid)
+                        // ❌ DON'T remove for 'messaging/registration-token-not-registered' - this is temporary
+                        //    (e.g., app closed, FCM hasn't processed token yet, network issues)
+                        //    Token is still valid - app will re-register on reopen
                         if (errorCode === 'messaging/invalid-argument' || 
-                            errorCode === 'messaging/registration-token-not-registered' ||
                             errorCode === 'messaging/invalid-registration-token') {
+                            // These are definitive errors - token is actually invalid, remove it
                             invalidTokens.push({ token, errorCode, errorMessage });
+                        } else if (errorCode === 'messaging/registration-token-not-registered') {
+                            // ✅ Temporary error - don't remove token
+                            // App will re-register on reopen and token will work again
+                            console.log(`[FCM] ℹ️ Token ${token ? token.substring(0, 30) + '...' : 'unknown'} reported as not registered (temporary) - keeping in database, app will re-register on reopen`);
                         }
                     }
                 });
