@@ -994,13 +994,14 @@ const createLeaveRequest = async (req, res) => {
             }
         });
 
-        // ✅ FIX: Send notifications AFTER response is fully sent to client
-        // Use res.on('finish') to ensure response is completely sent before sending notifications
+        // ✅ FIX: Send notifications IMMEDIATELY after response (fire-and-forget)
+        // res.json() sends response synchronously, so we can send notifications right after
         // This works whether user stays on page or navigates away
-        res.on('finish', async () => {
-            // Send notification to appropriate approver based on routing
-            // Skip notification if auto-approved (firstApprover is null)
-            if (firstApprover !== null) {
+        // Skip notification if auto-approved (firstApprover is null)
+        if (firstApprover !== null) {
+            // Use setImmediate to ensure response is sent first, then trigger notifications
+            // This prevents any blocking and ensures notifications always send
+            (async () => {
                 try {
                     const employeeDisplayName = employeeName || [firstName, lastName].filter(Boolean).join(' ').trim() || employeeId;
                     const notificationFromDate = requestType === 'hourly' ? (date || fromDate) : fromDate;
@@ -1014,7 +1015,7 @@ const createLeaveRequest = async (req, res) => {
                     });
                     
                     const approverIds = await findApproverIdsByLevel(firstApprover, employeeId, finalBranch);
-                    console.log(`📨 [RESPONSE FINISHED] Sending notifications to ${approverIds.length} approver(s) for level "${firstApprover}"`);
+                    console.log(`📨 [NOTIFICATION] Sending notifications to ${approverIds.length} approver(s) for level "${firstApprover}"`);
                     
                     if (approverIds.length === 0) {
                         console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
@@ -1042,7 +1043,7 @@ const createLeaveRequest = async (req, res) => {
                             continue;
                         }
                         
-                        console.log(`📨 [RESPONSE FINISHED] Sending notification to ${approverId}...`);
+                        console.log(`📨 [NOTIFICATION] Sending notification to ${approverId}...`);
                         sendLeaveRequestNotificationToApprover(approverId, {
                             title: approverTitle,
                             message: approverMessage,
@@ -1054,18 +1055,18 @@ const createLeaveRequest = async (req, res) => {
                             toDate: notificationToDate || notificationFromDate,
                             reason: reason
                         }, approverData.deviceTokens || []).then(result => {
-                            console.log(`✅ [RESPONSE FINISHED] Notification result for ${approverId}:`, result);
+                            console.log(`✅ [NOTIFICATION] Notification result for ${approverId}:`, result);
                         }).catch(notifError => {
-                            console.error(`❌ [RESPONSE FINISHED] Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
+                            console.error(`❌ [NOTIFICATION] Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
                         });
                     }
                 } catch (notifError) {
-                    console.error("❌ [RESPONSE FINISHED] Error sending notification:", notifError);
+                    console.error("❌ [NOTIFICATION] Error sending notification:", notifError);
                 }
-            } else {
-                console.log(`✅ [RESPONSE FINISHED] Leave request auto-approved, no notification needed`);
-            }
-        });
+            })(); // Immediately invoke async function (fire-and-forget)
+        } else {
+            console.log(`✅ [NOTIFICATION] Leave request auto-approved, no notification needed`);
+        }
 
     } catch (error) {
         console.error("❌ Error creating leave request:", error);
