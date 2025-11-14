@@ -425,18 +425,22 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
                     channelId: 'nano_hr_foreground'
                 }
             },
-            // iOS config - use minimal APNs headers (notification block handles the alert)
+            // iOS config - APNs payload structure
+            // iOS REQUIRES alert in apns.payload.aps for proper notification display
             apns: {
                 headers: {
-                    'apns-priority': '10',          // Required: High priority for immediate delivery
-                    'apns-push-type': 'alert',      // Required: Without this, APNs silently discards (iOS 13+)
+                    'apns-priority': '10',          // 10 = alert (visible), 5 = background (silent)
+                    'apns-push-type': 'alert'       // Required for iOS 13+
                     // apns-topic: Automatically set by Firebase Admin SDK
                 },
                 payload: {
                     aps: {
+                        alert: {
+                            title: title,           // Required for iOS notification display
+                            body: body              // Required for iOS notification display
+                        },
                         sound: 'default',
                         badge: 1
-                        // Don't duplicate alert here - notification block handles it
                     }
                 }
             }
