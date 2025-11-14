@@ -387,6 +387,78 @@ const sanitizeDeviceTokens = (tokens = []) => {
     );
 };
 
+/**
+ * Remove invalid tokens from database automatically
+ * Called when FCM reports tokens as invalid (expired, not registered, etc.)
+ */
+const removeInvalidTokensFromDatabase = async (invalidTokens) => {
+    if (!Array.isArray(invalidTokens) || invalidTokens.length === 0) {
+        return;
+    }
+
+    console.log(`[CLEANUP] Removing ${invalidTokens.length} invalid token(s) from database...`);
+
+    // Extract just the token strings from the invalid tokens array
+    const tokensToRemove = invalidTokens.map(item => item.token || item).filter(Boolean);
+    
+    if (tokensToRemove.length === 0) {
+        return;
+    }
+
+    try {
+        // Find all employees that have these invalid tokens
+        const employeesQuery = await db.collection('employees')
+            .where('deviceTokens', 'array-contains-any', tokensToRemove)
+            .get();
+
+        if (employeesQuery.empty) {
+            console.log(`[CLEANUP] No employees found with invalid tokens`);
+            return;
+        }
+
+        console.log(`[CLEANUP] Found ${employeesQuery.size} employee(s) with invalid tokens`);
+
+        // Remove tokens from each employee document
+        const removePromises = employeesQuery.docs.map(async (doc) => {
+            const employeeRef = db.collection('employees').doc(doc.id);
+            
+            return db.runTransaction(async (transaction) => {
+                const snap = await transaction.get(employeeRef);
+                if (!snap.exists) return;
+
+                const data = snap.data() || {};
+                const existingTokens = Array.isArray(data.deviceTokens) ? data.deviceTokens : [];
+                const existingDevices = Array.isArray(data.devices) ? data.devices : [];
+
+                // Remove invalid tokens
+                const validTokens = existingTokens.filter(token => !tokensToRemove.includes(token));
+                const validDevices = existingDevices.filter(device => {
+                    if (!device || typeof device !== 'object' || !device.token) return true;
+                    return !tokensToRemove.includes(device.token);
+                });
+
+                // Only update if tokens were actually removed
+                if (validTokens.length !== existingTokens.length || validDevices.length !== existingDevices.length) {
+                    const removedCount = existingTokens.length - validTokens.length;
+                    console.log(`[CLEANUP] Removing ${removedCount} invalid token(s) from employee ${doc.id}`);
+                    
+                    transaction.update(employeeRef, {
+                        deviceTokens: validTokens,
+                        devices: validDevices,
+                        updatedAt: new Date().toISOString()
+                    });
+                }
+            });
+        });
+
+        await Promise.all(removePromises);
+        console.log(`[CLEANUP] ✅ Successfully removed invalid tokens from ${employeesQuery.size} employee(s)`);
+    } catch (error) {
+        console.error(`[CLEANUP] ❌ Error removing invalid tokens:`, error);
+        // Don't throw - this is cleanup, shouldn't break the notification flow
+    }
+};
+
 const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
     console.log(`[FCM] Received ${deviceTokens?.length || 0} raw token(s) for notification`);
     
@@ -470,7 +542,14 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
                 
                 if (invalidTokens.length > 0) {
                     console.warn(`[FCM] ⚠️ Found ${invalidTokens.length} invalid token(s) that should be removed from database`);
-                    console.warn(`[FCM] Invalid tokens:`, invalidTokens.map(t => t.token.substring(0, 30) + '...'));
+                    console.warn(`[FCM] Invalid tokens:`, invalidTokens.map(t => (t.token || t).substring(0, 30) + '...'));
+                    
+                    // ✅ AUTOMATIC CLEANUP: Remove invalid tokens from database
+                    // This prevents future notification failures and keeps database clean
+                    removeInvalidTokensFromDatabase(invalidTokens).catch(err => {
+                        console.error(`[FCM] ❌ Error during token cleanup:`, err);
+                        // Don't throw - cleanup shouldn't break notification flow
+                    });
                 }
             }
             
