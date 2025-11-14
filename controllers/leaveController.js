@@ -1,6 +1,6 @@
 const { admin, db } = require("../config/firebaseConfig");
 const { v4: uuidv4 } = require('uuid');
-const { sendLeaveRequestNotification, sendLeaveRequestNotificationToApprover, sendLeaveStatusNotification, createInAppNotification } = require('./notificationController');
+const { sendLeaveRequestNotification, sendLeaveRequestNotificationToApprover, sendLeaveStatusNotification, createInAppNotification, findEmployeeDocRef } = require('./notificationController');
 
 const getEmployeeNotificationChannels = (status) => {
     const finalStatuses = ['approved', 'rejected', 'cancelled'];
@@ -169,20 +169,24 @@ const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, 
     }
 };
 
-const findApproverIdsByLevel = async (level, employeeId) => {
-    console.log('📨 findApproverIdsByLevel: 1', level, employeeId);
+const findApproverIdsByLevel = async (level, employeeId, branchCode = null) => {
+    console.log('📨 findApproverIdsByLevel:', level, employeeId, branchCode ? `branch: ${branchCode}` : '');
     const employeesRef = db.collection("employees");
     const ids = [];
-    let branchCode = "001";
-
-    try {
-        const employeeQuery = await employeesRef.where("uid", "==", employeeId).limit(1).get();
-        if (!employeeQuery.empty) {
-            const employeeData = employeeQuery.docs[0].data();
-            branchCode = employeeData.branch || branchCode;
+    
+    // Use provided branchCode, or fetch from employee data if not provided
+    let finalBranchCode = branchCode || "001";
+    
+    if (!branchCode) {
+        try {
+            const employeeQuery = await employeesRef.where("uid", "==", employeeId).limit(1).get();
+            if (!employeeQuery.empty) {
+                const employeeData = employeeQuery.docs[0].data();
+                finalBranchCode = employeeData.branch || finalBranchCode;
+            }
+        } catch (error) {
+            console.error("❌ Error loading employee for approver lookup:", error);
         }
-    } catch (error) {
-        console.error("❌ Error loading employee for approver lookup:", error);
     }
 
     switch ((level || '').toLowerCase()) {
@@ -193,13 +197,13 @@ const findApproverIdsByLevel = async (level, employeeId) => {
                 .get();
             managersWithManagedBranchesQuery.forEach(doc => {
                 const managerData = doc.data();
-                if (Array.isArray(managerData.managedBranches) && managerData.managedBranches.includes(branchCode)) {
+                if (Array.isArray(managerData.managedBranches) && managerData.managedBranches.includes(finalBranchCode)) {
                     ids.push(managerData.uid);
                 }
             });
 
             const sameBranchManagerQuery = await employeesRef
-                .where("branch", "==", branchCode)
+                .where("branch", "==", finalBranchCode)
                 .where("positionName", "==", "Manager")
                 .get();
             sameBranchManagerQuery.forEach(doc => {
@@ -811,6 +815,9 @@ const createLeaveRequest = async (req, res) => {
             attachmentData = attachment;
         }
 
+        // Get employee data ONCE (reuse for company/location/branch AND role)
+        const employeeDoc = await loadEmployeeDoc();
+        
         // Use provided company/location/branch data, with fallback to employee data
         let finalCompany = company;
         let finalCompanyName = companyName;
@@ -819,34 +826,26 @@ const createLeaveRequest = async (req, res) => {
         let finalBranch = branch;
         let finalBranchName = branchName;
         
-        // Fallback: Get employee data if company/location/branch not provided
-        if (!finalCompany || !finalCompanyName || !finalLocation || !finalLocationName || !finalBranch || !finalBranchName) {
-        const doc = await loadEmployeeDoc();
-        if (doc) {
-            finalCompany = finalCompany || doc.company || "NANO";
-            finalCompanyName = finalCompanyName || doc.companyName || "NANO Company";
-            finalLocation = finalLocation || doc.location || "BKK";
-            finalLocationName = finalLocationName || doc.locationName || "Bangkok";
-            finalBranch = finalBranch || doc.branch || "001";
-            finalBranchName = finalBranchName || doc.branchName || "Main Branch";
-            } else {
-                // Ultimate fallback
-                finalCompany = finalCompany || "NANO";
-                finalCompanyName = finalCompanyName || "NANO Company";
-                finalLocation = finalLocation || "BKK";
-                finalLocationName = finalLocationName || "Bangkok";
-                finalBranch = finalBranch || "001";
-                finalBranchName = finalBranchName || "Main Branch";
-            }
+        // Fallback: Use employee data if company/location/branch not provided
+        if (employeeDoc) {
+            finalCompany = finalCompany || employeeDoc.company || "NANO";
+            finalCompanyName = finalCompanyName || employeeDoc.companyName || "NANO Company";
+            finalLocation = finalLocation || employeeDoc.location || "BKK";
+            finalLocationName = finalLocationName || employeeDoc.locationName || "Bangkok";
+            finalBranch = finalBranch || employeeDoc.branch || "001";
+            finalBranchName = finalBranchName || employeeDoc.branchName || "Main Branch";
+        } else {
+            // Ultimate fallback
+            finalCompany = finalCompany || "NANO";
+            finalCompanyName = finalCompanyName || "NANO Company";
+            finalLocation = finalLocation || "BKK";
+            finalLocationName = finalLocationName || "Bangkok";
+            finalBranch = finalBranch || "001";
+            finalBranchName = finalBranchName || "Main Branch";
         }
-        
 
-        // Get employee data to check their role (for approver auto-approval)
-        let employeeRole = null;
-        const docForRole = await loadEmployeeDoc();
-        if (docForRole) {
-            employeeRole = docForRole.role;
-        }
+        // Get employee role from the same document we already fetched
+        const employeeRole = employeeDoc?.role || null;
         
         // Determine first approver based on requester's position/role
         // This prevents people from approving their own leave requests
@@ -967,7 +966,7 @@ const createLeaveRequest = async (req, res) => {
                     fromDate: notificationFromDate,
                     toDate: notificationToDate
                 });
-                const approverIds = await findApproverIdsByLevel(firstApprover, employeeId);
+                const approverIds = await findApproverIdsByLevel(firstApprover, employeeId, finalBranch);
                 console.log('📨 approverIds: 1', approverIds);
                 if (approverIds.length === 0) {
                     console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
@@ -976,9 +975,30 @@ const createLeaveRequest = async (req, res) => {
             // Send notifications to all found approvers using simplified function
             if (approverIds && approverIds.length > 0) {
                 console.log(`📨 Sending notifications to ${approverIds.length} approver(s) for level "${firstApprover}"`);
-                for (const approverId of approverIds) {
-                    console.log(`📨 Sending notification to approver ${approverId}...`);
+                
+                // Fetch all approver data once to get device tokens (avoid re-fetching in notification function)
+                const approverDocs = await Promise.all(
+                    approverIds.map(async (approverId) => {
+                        const approverRef = await findEmployeeDocRef(approverId);
+                        if (approverRef) {
+                            const doc = await approverRef.get();
+                            if (doc.exists) {
+                                return { id: approverId, data: doc.data() };
+                            }
+                        }
+                        return { id: approverId, data: null };
+                    })
+                );
+                
+                for (const { id: approverId, data: approverData } of approverDocs) {
+                    if (!approverData) {
+                        console.warn(`⚠️ Approver data not found for ${approverId}, skipping notification`);
+                        continue;
+                    }
+                    
+                    console.log(`📨 About to call sendLeaveRequestNotificationToApprover for ${approverId}...`);
                     // Use simplified function - direct employee ID targeting
+                    // Pass device tokens to avoid re-fetching approver document
                     sendLeaveRequestNotificationToApprover(approverId, {
                         title: approverTitle,
                         message: approverMessage,
@@ -989,7 +1009,7 @@ const createLeaveRequest = async (req, res) => {
                         fromDate: notificationFromDate || notificationToDate,
                         toDate: notificationToDate || notificationFromDate,
                         reason: reason
-                    }).then(result => {
+                    }, approverData.deviceTokens || []).then(result => {
                         console.log(`✅ Notification result for ${approverId}:`, result);
                     }).catch(notifError => {
                         console.error(`❌ Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
@@ -1970,16 +1990,35 @@ const approveLeaveRequest = async (req, res) => {
         if (action === 'approve' && nextApprover) {
             try {
                 console.log(`📨 NEW CODE PATH: Finding approvers for level "${nextApprover}" for employee ${leaveData.employeeId}`);
-                const approverIds = await findApproverIdsByLevel(nextApprover, leaveData.employeeId);
+                const approverIds = await findApproverIdsByLevel(nextApprover, leaveData.employeeId, leaveData.branch);
                 console.log(`📨 Found ${approverIds.length} approver(s):`, approverIds);
                 
                 if (approverIds && approverIds.length > 0) {
                     const approverNotification = buildApproverNotificationContent(nextApprover, notificationBase);
                     console.log(`📨 Notification content:`, approverNotification);
                     
-                    for (const approverId of approverIds) {
-                        console.log(`📨 Sending notification to approver ${approverId}...`);
-                        // Use simplified function - just pass approver ID and notification content
+                    // Fetch all approver data once to get device tokens (avoid re-fetching in notification function)
+                    const approverDocs = await Promise.all(
+                        approverIds.map(async (approverId) => {
+                            const approverRef = await findEmployeeDocRef(approverId);
+                            if (approverRef) {
+                                const doc = await approverRef.get();
+                                if (doc.exists) {
+                                    return { id: approverId, data: doc.data() };
+                                }
+                            }
+                            return { id: approverId, data: null };
+                        })
+                    );
+                    
+                    for (const { id: approverId, data: approverData } of approverDocs) {
+                        if (!approverData) {
+                            console.warn(`⚠️ Approver data not found for ${approverId}, skipping notification`);
+                            continue;
+                        }
+                        
+                        console.log(`📨 About to call sendLeaveRequestNotificationToApprover for ${approverId}...`);
+                        // Use simplified function - pass device tokens to avoid re-fetching approver document
                         sendLeaveRequestNotificationToApprover(approverId, {
                             title: approverNotification.title,
                             message: approverNotification.message,
@@ -1990,7 +2029,7 @@ const approveLeaveRequest = async (req, res) => {
                             fromDate: leaveData.fromDate || leaveData.date,
                             toDate: leaveData.toDate || leaveData.date,
                             reason: comment || leaveData.reason
-                        }).then(result => {
+                        }, approverData.deviceTokens || []).then(result => {
                             console.log(`✅ Notification result for ${approverId}:`, result);
                         }).catch(err => {
                             console.error(`❌ Failed to send notification to ${nextApprover} ${approverId}:`, err);

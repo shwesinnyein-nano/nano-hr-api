@@ -244,6 +244,7 @@ const sendLeaveRequestNotification = async (req, res) => {
 
 // NEW: Simplified version - send notification to specific approver by employee ID
 // Takes approver employee ID and notification content directly
+// Optional deviceTokens parameter to avoid re-fetching approver document
 const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
     title,
     message,
@@ -254,33 +255,44 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
     fromDate,
     toDate,
     reason
-}) => {
+}, deviceTokens = null) => {
     try {
-        console.log(`📨 sendLeaveRequestNotificationToApprover: Sending to ${approverEmployeeId}`);
+        console.log(`[NOTIF] Sending to approver ${approverEmployeeId} - Title: "${title}"`);
         
-        // Get approver's data (for device tokens)
-        const approverRef = await findEmployeeDocRef(approverEmployeeId);
-        if (!approverRef) {
-            console.warn(`⚠️ Approver not found: ${approverEmployeeId}`);
-            return { success: false, message: "Approver not found" };
+        let sanitizedTokens = [];
+        let approverData = null;
+
+        // Use provided device tokens, or fetch approver data if not provided
+        if (deviceTokens && Array.isArray(deviceTokens)) {
+            console.log('📨 deviceTokens: 3', deviceTokens);
+            sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
+        } 
+        else {
+            console.log('📨 deviceTokens: 4', deviceTokens);
+            // Get approver's data (for device tokens) - only if not provided
+            const approverRef = await findEmployeeDocRef(approverEmployeeId);
+            if (!approverRef) {
+                console.error(`[NOTIF] ERROR: Approver not found: ${approverEmployeeId}`);
+                return { success: false, message: "Approver not found" };
+            }
+
+            const approverDoc = await approverRef.get();
+            if (!approverDoc.exists) {
+                console.error(`[NOTIF] ERROR: Approver document not found: ${approverEmployeeId}`);
+                return { success: false, message: "Approver document not found" };
+            }
+
+            approverData = approverDoc.data();
+            sanitizedTokens = sanitizeDeviceTokens(approverData.deviceTokens || []);
         }
 
-        const approverDoc = await approverRef.get();
-        if (!approverDoc.exists) {
-            console.warn(`⚠️ Approver document does not exist: ${approverEmployeeId}`);
-            return { success: false, message: "Approver document not found" };
-        }
-
-        const approverData = approverDoc.data();
         const results = [];
 
         // Send push notification
-        const deviceTokens = approverData.deviceTokens || [];
-        const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
-        
-        console.log(`📨 Approver ${approverEmployeeId} has ${sanitizedTokens.length} device token(s)`);
+        console.log('📨 sanitizedTokens: 1', sanitizedTokens);
         
         if (sanitizedTokens.length > 0) {
+            console.log('📨 sanitizedTokens: 2', sanitizedTokens);
             const pushResult = await sendPushNotification(
                 sanitizedTokens,
                 title,
@@ -293,10 +305,9 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
                     leaveTypeNameEng: leaveTypeNameEng
                 }
             );
-            console.log(`📨 Push notification result for ${approverEmployeeId}:`, pushResult);
             results.push({ channel: 'push', ...pushResult });
         } else {
-            console.warn(`⚠️ No device tokens found for approver ${approverEmployeeId}`);
+            console.warn(`[NOTIF] No device tokens for ${approverEmployeeId}`);
             results.push({ channel: 'push', success: false, message: 'No device tokens found' });
         }
 
@@ -316,8 +327,9 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
                 reason
             }
         );
-        console.log(`✅ In-app notification created for ${approverEmployeeId}:`, inAppResult.id);
         results.push({ channel: 'in_app', notification: inAppResult });
+
+        console.log(`[NOTIF] ✅ Sent to ${approverEmployeeId} - Push: ${results.find(r => r.channel === 'push')?.success || false}, In-app: ${!!inAppResult.id}`);
 
         return {
             success: true,
@@ -326,7 +338,7 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
         };
 
     } catch (error) {
-        console.error(`❌ Error sending notification to approver ${approverEmployeeId}:`, error);
+        console.error(`[NOTIF] ❌ Error sending to ${approverEmployeeId}:`, error.message);
         return {
             success: false,
             message: "Failed to send notification",
@@ -357,91 +369,68 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
 
     console.log('📨 FCM tokens:', sanitizedTokens);
 
-        // Prepare the message with required iOS headers
-        // Backend requirements for iOS push notifications:
-        // 1. ✅ apns-priority: '10' - High priority for immediate delivery
-        // 2. ✅ apns-push-type: 'alert' - Required for visible notifications (iOS 13+)
-        // 3. ✅ apns-topic - Automatically set by Firebase Admin SDK from service account
-        //    (Must match bundle ID in Firebase Console, e.g., com.nano.hr)
-        // 4. ✅ notification block with title/body - Required for visible alerts
+        // Prepare the message with platform-specific configuration
+        // For iOS: Use notification block + APNs headers (simpler, works better)
+        // For Android: Add Android-specific config for priority and sound
         const message = {
             tokens: sanitizedTokens,
             notification: {
-                title: title,  // Required: For visible notification title
-                body: body     // Required: For visible notification body
+                title: title,  // Works for both iOS and Android
+                body: body     // Works for both iOS and Android
             },
             data: data,
+            // Android config (only affects Android devices)
             android: {
                 priority: 'high',
                 notification: {
-                    sound: 'default'
+                    sound: 'default',
+                    channelId: 'nano_hr_foreground'
                 }
             },
+            // iOS config - use minimal APNs headers (notification block handles the alert)
             apns: {
                 headers: {
-                    'apns-priority': '10',          // Required: Without this, APNs may delay delivery
+                    'apns-priority': '10',          // Required: High priority for immediate delivery
                     'apns-push-type': 'alert',      // Required: Without this, APNs silently discards (iOS 13+)
                     // apns-topic: Automatically set by Firebase Admin SDK
-                    // Verify bundle ID matches in Firebase Console > Project Settings > Cloud Messaging > APNs
                 },
                 payload: {
                     aps: {
-                        alert: {
-                            title: title,           // Required: For local alert display
-                            body: body              // Required: For local alert display
-                        },
                         sound: 'default',
                         badge: 1
+                        // Don't duplicate alert here - notification block handles it
                     }
                 }
             }
         };
         // Send using Firebase Admin SDK (v13+)
-        // Firebase Admin SDK automatically sets apns-topic from service account credentials
-        // Ensure APNS certificate/key is configured in Firebase Console
-        console.log('📤 Sending FCM message:', JSON.stringify({
-            tokenCount: sanitizedTokens.length,
-            title: title,
-            body: body,
-            hasNotificationBlock: !!message.notification,
-            hasApnsHeaders: !!message.apns?.headers,
-            apnsHeaders: message.apns?.headers,
-            hasApnsPayload: !!message.apns?.payload
-        }, null, 2));
-        
-        const response = await admin.messaging().sendEachForMulticast(message);
-        
-        console.log(`📲 Push Notification sent:`);
-        console.log(`   ✅ Success Count: ${response.successCount}`);
-        console.log(`   ❌ Failure Count: ${response.failureCount}`);
-        
-        if (response.failureCount > 0) {
-            const failedTokens = [];
-            const failedReasons = [];
-            response.responses.forEach((resp, idx) => {
-                if (!resp.success) {
-                    const token = sanitizedTokens[idx];
-                    failedTokens.push(token);
-                    failedReasons.push({
-                        token: token ? `${token.substring(0, 20)}...` : 'unknown',
-                        error: resp.error ? resp.error.code : 'unknown',
-                        message: resp.error ? resp.error.message : 'unknown'
-                    });
-                }
-            });
-            console.log('❌ Failed tokens:', failedTokens);
-            console.log('❌ Failure details:', JSON.stringify(failedReasons, null, 2));
-        }
-        
-        if (response.successCount > 0) {
-            const successfulTokens = [];
-            response.responses.forEach((resp, idx) => {
-                if (resp.success) {
-                    const token = sanitizedTokens[idx];
-                    successfulTokens.push(token ? `${token.substring(0, 20)}...` : 'unknown');
-                }
-            });
-            console.log(`✅ Successfully sent to ${response.successCount} token(s)`);
+        let response;
+        try {
+            response = await admin.messaging().sendEachForMulticast(message);
+            
+            if (response.failureCount > 0) {
+                response.responses.forEach((resp, idx) => {
+                    if (!resp.success) {
+                        const token = sanitizedTokens[idx];
+                        console.error(`[FCM] ❌ Failed token ${token ? token.substring(0, 20) + '...' : 'unknown'}: ${resp.error?.code || 'unknown'} - ${resp.error?.message || 'unknown'}`);
+                    }
+                });
+            }
+            
+            if (response.successCount > 0) {
+                console.log(`[FCM] ✅ Sent to ${response.successCount} device(s) | ❌ ${response.failureCount} failed`);
+            } else {
+                console.error(`[FCM] ❌ All ${response.failureCount} notification(s) failed`);
+            }
+        } catch (fcmError) {
+            console.error('[FCM] ❌ ERROR:', fcmError.message);
+            return {
+                success: false,
+                message: 'Failed to send push notification',
+                error: fcmError.message,
+                successCount: 0,
+                failureCount: sanitizedTokens.length
+            };
         }
         
         return { 
@@ -1197,3 +1186,4 @@ module.exports.unregisterDevice = unregisterDevice;
 module.exports.getUnreadCount = getUnreadCount;
 module.exports.markAllAsRead = markAllAsRead;
 module.exports.sendTestPush = sendTestPush;
+module.exports.findEmployeeDocRef = findEmployeeDocRef;
