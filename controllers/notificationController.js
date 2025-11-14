@@ -370,9 +370,15 @@ const sanitizeDeviceTokens = (tokens = []) => {
                     // Check for obviously invalid patterns
                     // FCM tokens shouldn't start with weird prefixes like 'c_'
                     // Valid tokens usually start with alphanumeric or have specific patterns
-                    if (token.startsWith('c_') || token.length < 140) {
-                        console.warn(`[FCM] Suspicious token format: ${token.substring(0, 30)}... (${token.length} chars)`);
-                        // Still allow it, but log warning
+                    if (token.startsWith('c_')) {
+                        console.warn(`[FCM] Invalid token format (starts with 'c_'): ${token.substring(0, 30)}... (${token.length} chars) - FILTERED OUT`);
+                        return false; // Filter out tokens starting with 'c_' - they're invalid/corrupted
+                    }
+                    
+                    // Filter out tokens that are too short (less than 140 chars are likely invalid)
+                    if (token.length < 140) {
+                        console.warn(`[FCM] Invalid token (too short): ${token.substring(0, 30)}... (${token.length} chars) - FILTERED OUT`);
+                        return false;
                     }
                     
                     return true;
@@ -382,13 +388,22 @@ const sanitizeDeviceTokens = (tokens = []) => {
 };
 
 const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+    console.log(`[FCM] Received ${deviceTokens?.length || 0} raw token(s) for notification`);
+    
     const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
-    console.log('📨 sendPushNotification: tokens', sanitizedTokens, title, body, data);
+    console.log(`[FCM] After sanitization: ${sanitizedTokens.length} valid token(s)`);
+    
+    if (sanitizedTokens.length !== (deviceTokens?.length || 0)) {
+        const filteredCount = (deviceTokens?.length || 0) - sanitizedTokens.length;
+        console.warn(`[FCM] ⚠️ Filtered out ${filteredCount} invalid token(s)`);
+    }
 
     if (sanitizedTokens.length === 0) {
-        console.log('⚠️ No valid device tokens provided for push notification');
-            return { success: false, message: 'No device tokens provided' };
-        }
+        console.error('[FCM] ❌ No valid device tokens after sanitization');
+        return { success: false, message: 'No valid device tokens provided' };
+    }
+    
+    console.log(`[FCM] Sending notification: "${title}" to ${sanitizedTokens.length} device(s)`);
 
     console.log('📨 FCM tokens:', sanitizedTokens);
 
@@ -520,8 +535,8 @@ const sendPushNotification3 = async (deviceTokens, title, body, data = {}) => {
 
     if (sanitizedTokens.length === 0) {
         console.log('⚠️ No valid device tokens provided for push notification');
-        return { success: false, message: 'No device tokens provided' };
-    }
+            return { success: false, message: 'No device tokens provided' };
+        }
 
     console.log('📨 FCM tokens:', sanitizedTokens);
 
