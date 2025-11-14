@@ -994,10 +994,10 @@ const createLeaveRequest = async (req, res) => {
             }
         });
 
-        // ✅ FIX: Send notifications AFTER response is sent
-        // This ensures notifications are sent even if user navigates away quickly
-        // Use setImmediate to ensure response is fully sent before triggering notifications
-        setImmediate(async () => {
+        // ✅ FIX: Send notifications AFTER response is fully sent to client
+        // Use res.on('finish') to ensure response is completely sent before sending notifications
+        // This works whether user stays on page or navigates away
+        res.on('finish', async () => {
             // Send notification to appropriate approver based on routing
             // Skip notification if auto-approved (firstApprover is null)
             if (firstApprover !== null) {
@@ -1014,7 +1014,7 @@ const createLeaveRequest = async (req, res) => {
                     });
                     
                     const approverIds = await findApproverIdsByLevel(firstApprover, employeeId, finalBranch);
-                    console.log(`📨 [AFTER RESPONSE] Sending notifications to ${approverIds.length} approver(s) for level "${firstApprover}"`);
+                    console.log(`📨 [RESPONSE FINISHED] Sending notifications to ${approverIds.length} approver(s) for level "${firstApprover}"`);
                     
                     if (approverIds.length === 0) {
                         console.warn(`⚠️ No approvers found for level ${firstApprover} when creating leave request ${leaveRequestId}`);
@@ -1042,7 +1042,7 @@ const createLeaveRequest = async (req, res) => {
                             continue;
                         }
                         
-                        console.log(`📨 [AFTER RESPONSE] Sending notification to ${approverId}...`);
+                        console.log(`📨 [RESPONSE FINISHED] Sending notification to ${approverId}...`);
                         sendLeaveRequestNotificationToApprover(approverId, {
                             title: approverTitle,
                             message: approverMessage,
@@ -1054,16 +1054,16 @@ const createLeaveRequest = async (req, res) => {
                             toDate: notificationToDate || notificationFromDate,
                             reason: reason
                         }, approverData.deviceTokens || []).then(result => {
-                            console.log(`✅ [AFTER RESPONSE] Notification result for ${approverId}:`, result);
+                            console.log(`✅ [RESPONSE FINISHED] Notification result for ${approverId}:`, result);
                         }).catch(notifError => {
-                            console.error(`❌ [AFTER RESPONSE] Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
+                            console.error(`❌ [RESPONSE FINISHED] Failed to send leave request notification to ${firstApprover} ${approverId}:`, notifError);
                         });
                     }
                 } catch (notifError) {
-                    console.error("❌ [AFTER RESPONSE] Error sending notification:", notifError);
+                    console.error("❌ [RESPONSE FINISHED] Error sending notification:", notifError);
                 }
             } else {
-                console.log(`✅ [AFTER RESPONSE] Leave request auto-approved, no notification needed`);
+                console.log(`✅ [RESPONSE FINISHED] Leave request auto-approved, no notification needed`);
             }
         });
 
