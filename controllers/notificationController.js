@@ -256,6 +256,8 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
     reason
 }) => {
     try {
+        console.log(`📨 sendLeaveRequestNotificationToApprover: Sending to ${approverEmployeeId}`);
+        
         // Get approver's data (for device tokens)
         const approverRef = await findEmployeeDocRef(approverEmployeeId);
         if (!approverRef) {
@@ -276,6 +278,8 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
         const deviceTokens = approverData.deviceTokens || [];
         const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
         
+        console.log(`📨 Approver ${approverEmployeeId} has ${sanitizedTokens.length} device token(s)`);
+        
         if (sanitizedTokens.length > 0) {
             const pushResult = await sendPushNotification(
                 sanitizedTokens,
@@ -289,8 +293,10 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
                     leaveTypeNameEng: leaveTypeNameEng
                 }
             );
+            console.log(`📨 Push notification result for ${approverEmployeeId}:`, pushResult);
             results.push({ channel: 'push', ...pushResult });
         } else {
+            console.warn(`⚠️ No device tokens found for approver ${approverEmployeeId}`);
             results.push({ channel: 'push', success: false, message: 'No device tokens found' });
         }
 
@@ -310,6 +316,7 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
                 reason
             }
         );
+        console.log(`✅ In-app notification created for ${approverEmployeeId}:`, inAppResult.id);
         results.push({ channel: 'in_app', notification: inAppResult });
 
         return {

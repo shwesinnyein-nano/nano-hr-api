@@ -1975,12 +1975,16 @@ const approveLeaveRequest = async (req, res) => {
         // Uses simplified function that takes approver employee ID directly
         if (action === 'approve' && nextApprover) {
             try {
+                console.log(`📨 NEW CODE PATH: Finding approvers for level "${nextApprover}" for employee ${leaveData.employeeId}`);
                 const approverIds = await findApproverIdsByLevel(nextApprover, leaveData.employeeId);
+                console.log(`📨 Found ${approverIds.length} approver(s):`, approverIds);
                 
                 if (approverIds && approverIds.length > 0) {
                     const approverNotification = buildApproverNotificationContent(nextApprover, notificationBase);
+                    console.log(`📨 Notification content:`, approverNotification);
                     
                     for (const approverId of approverIds) {
+                        console.log(`📨 Sending notification to approver ${approverId}...`);
                         // Use simplified function - just pass approver ID and notification content
                         sendLeaveRequestNotificationToApprover(approverId, {
                             title: approverNotification.title,
@@ -1992,14 +1996,20 @@ const approveLeaveRequest = async (req, res) => {
                             fromDate: leaveData.fromDate || leaveData.date,
                             toDate: leaveData.toDate || leaveData.date,
                             reason: comment || leaveData.reason
+                        }).then(result => {
+                            console.log(`✅ Notification result for ${approverId}:`, result);
                         }).catch(err => {
                             console.error(`❌ Failed to send notification to ${nextApprover} ${approverId}:`, err);
                         });
                     }
+                } else {
+                    console.warn(`⚠️ No approvers found for level "${nextApprover}"`);
                 }
             } catch (nextApproverError) {
                 console.error("❌ Error sending notification to next approver:", nextApproverError);
             }
+        } else {
+            console.log(`📨 NEW CODE PATH SKIPPED: action=${action}, nextApprover=${nextApprover}`);
         }
         
         res.json({
