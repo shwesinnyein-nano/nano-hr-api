@@ -106,9 +106,9 @@ const sendLeaveRequestNotification = async (req, res) => {
         // Only fetch employee data if we need it for default message (no overrides provided)
         let employeeData = null;
         if (!titleOverride || !messageOverride) {
-            const employeeRef = await findEmployeeDocRef(employeeId);
+        const employeeRef = await findEmployeeDocRef(employeeId);
             if (employeeRef) {
-                const employeeDoc = await employeeRef.get();
+        const employeeDoc = await employeeRef.get();
                 if (employeeDoc.exists) {
                     employeeData = employeeDoc.data();
                 }
@@ -352,17 +352,23 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
 
     if (sanitizedTokens.length === 0) {
         console.log('⚠️ No valid device tokens provided for push notification');
-        return { success: false, message: 'No device tokens provided' };
-    }
+            return { success: false, message: 'No device tokens provided' };
+        }
 
     console.log('📨 FCM tokens:', sanitizedTokens);
 
-        // Prepare the message
+        // Prepare the message with required iOS headers
+        // Backend requirements for iOS push notifications:
+        // 1. ✅ apns-priority: '10' - High priority for immediate delivery
+        // 2. ✅ apns-push-type: 'alert' - Required for visible notifications (iOS 13+)
+        // 3. ✅ apns-topic - Automatically set by Firebase Admin SDK from service account
+        //    (Must match bundle ID in Firebase Console, e.g., com.nano.hr)
+        // 4. ✅ notification block with title/body - Required for visible alerts
         const message = {
             tokens: sanitizedTokens,
             notification: {
-                title: title,
-                body: body
+                title: title,  // Required: For visible notification title
+                body: body     // Required: For visible notification body
             },
             data: data,
             android: {
@@ -373,14 +379,16 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             },
             apns: {
                 headers: {
-                    'apns-priority': '10',
-                    'apns-push-type': 'alert'
+                    'apns-priority': '10',          // Required: Without this, APNs may delay delivery
+                    'apns-push-type': 'alert',      // Required: Without this, APNs silently discards (iOS 13+)
+                    // apns-topic: Automatically set by Firebase Admin SDK
+                    // Verify bundle ID matches in Firebase Console > Project Settings > Cloud Messaging > APNs
                 },
                 payload: {
                     aps: {
                         alert: {
-                            title: title,
-                            body: body
+                            title: title,           // Required: For local alert display
+                            body: body              // Required: For local alert display
                         },
                         sound: 'default',
                         badge: 1
@@ -389,6 +397,18 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
             }
         };
         // Send using Firebase Admin SDK (v13+)
+        // Firebase Admin SDK automatically sets apns-topic from service account credentials
+        // Ensure APNS certificate/key is configured in Firebase Console
+        console.log('📤 Sending FCM message:', JSON.stringify({
+            tokenCount: sanitizedTokens.length,
+            title: title,
+            body: body,
+            hasNotificationBlock: !!message.notification,
+            hasApnsHeaders: !!message.apns?.headers,
+            apnsHeaders: message.apns?.headers,
+            hasApnsPayload: !!message.apns?.payload
+        }, null, 2));
+        
         const response = await admin.messaging().sendEachForMulticast(message);
         
         console.log(`📲 Push Notification sent:`);
