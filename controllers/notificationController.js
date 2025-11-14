@@ -1095,13 +1095,43 @@ const markAllAsRead = async (req, res) => {
 const sendTestPush = async (req, res) => {
     try {
         const { employeeId, title, body } = req.body || {};
-        if (!employeeId || !title || !body) return res.status(400).json({ success: false, message: 'employeeId, title, body are required' });
+        if (!employeeId || !title || !body) {
+            return res.status(400).json({ success: false, message: 'employeeId, title, body are required' });
+        }
+        
+        console.log(`📨 sendTestPush: Testing push for employee ${employeeId}`);
+        
         const empRef = await findEmployeeDocRef(employeeId);
-        if (!empRef) return res.status(404).json({ success: false, message: 'Employee not found' });
+        if (!empRef) {
+            console.warn(`⚠️ Employee not found: ${employeeId}`);
+            return res.status(404).json({ success: false, message: 'Employee not found' });
+        }
+        
         const empDoc = await empRef.get();
-        const tokens = (empDoc.data().deviceTokens || []).filter(Boolean);
-        if (tokens.length === 0) return res.status(200).json({ success: true, message: 'No device tokens to send' });
-        const result = await sendPushNotification(tokens, title, body, { type: 'test' });
+        if (!empDoc.exists) {
+            console.warn(`⚠️ Employee document does not exist: ${employeeId}`);
+            return res.status(404).json({ success: false, message: 'Employee document not found' });
+        }
+        
+        const empData = empDoc.data();
+        const rawTokens = empData.deviceTokens || [];
+        const sanitizedTokens = sanitizeDeviceTokens(rawTokens);
+        
+        console.log(`📨 Employee ${employeeId} has ${rawTokens.length} raw token(s), ${sanitizedTokens.length} valid token(s)`);
+        console.log(`📨 Valid tokens:`, sanitizedTokens);
+        
+        if (sanitizedTokens.length === 0) {
+            return res.status(200).json({ 
+                success: true, 
+                message: 'No valid device tokens found for employee',
+                rawTokensCount: rawTokens.length,
+                validTokensCount: 0
+            });
+        }
+        
+        const result = await sendPushNotification(sanitizedTokens, title, body, { type: 'test' });
+        console.log(`📨 Test push result:`, result);
+        
         return res.json({ success: true, ...result });
     } catch (err) {
         console.error('❌ sendTestPush error:', err);
