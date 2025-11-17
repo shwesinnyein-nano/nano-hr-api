@@ -825,16 +825,38 @@ exports.changePassword = async (req, res) => {
         
         if (email) {
             const employeesRef = db.collection("employees");
-            const querySnapshot = await employeesRef.where("email", "==", email).get();
+            // Try root level email first
+            let querySnapshot = await employeesRef.where("email", "==", email).get();
             
+            // If not found, try nested documents.email
             if (querySnapshot.empty) {
-                return res.status(404).json({ 
-                    success: false,
-                    message: "Employee not found with this email address" 
+                // Get all employees and filter by nested email (less efficient but handles nested structure)
+                const allEmployees = await employeesRef.get();
+                const matchingDocs = [];
+                allEmployees.forEach(doc => {
+                    const data = doc.data();
+                    // Check root level email
+                    if (data.email === email) {
+                        matchingDocs.push(doc);
+                    }
+                    // Check nested documents.email
+                    else if (data.documents && data.documents.email === email) {
+                        matchingDocs.push(doc);
+                    }
                 });
+                
+                if (matchingDocs.length === 0) {
+                    return res.status(404).json({ 
+                        success: false,
+                        message: "Employee not found with this email address" 
+                    });
+                }
+                
+                employeeDoc = matchingDocs[0];
+            } else {
+                employeeDoc = querySnapshot.docs[0];
             }
             
-            employeeDoc = querySnapshot.docs[0];
             employeeData = employeeDoc.data();
         } else {
             // Find by employeeId (document ID or uid field)
