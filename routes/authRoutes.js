@@ -12,6 +12,8 @@ router.post("/login-user", authController.loginUser); // NEW LOGIN ENDPOINT
 router.post("/register-user", authController.registerUser); // NEW REGISTER ENDPOINT
 router.post("/check-email", authController.checkEmail); // CHECK EMAIL EXISTS
 router.post("/change-password", authController.changePassword); // CHANGE PASSWORD
+router.post("/forgot-password", authController.forgotPassword); // FORGOT PASSWORD
+router.post("/reset-password", authController.resetPassword); // RESET PASSWORD
 router.get("/verify-token", authController.verifyToken);
 router.get("/employee/:authId", authController.getEmployeeByAuthId);
 

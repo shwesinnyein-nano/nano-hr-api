@@ -1,6 +1,7 @@
 const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { admin, db } = require("../config/firebaseConfig");
 
 exports.sendOTP = async (req, res) => {
@@ -918,6 +919,256 @@ exports.changePassword = async (req, res) => {
             success: false,
             message: "Failed to change password",
             messageTh: "ไม่สามารถเปลี่ยนรหัสผ่านได้",
+            error: error.message 
+        });
+    }
+};
+
+// Helper function to find employee by email (handles nested documents.email)
+const findEmployeeByEmail = async (email) => {
+    const employeesRef = db.collection("employees");
+    
+    // Try root level email first
+    let querySnapshot = await employeesRef.where("email", "==", email).get();
+    
+    if (!querySnapshot.empty) {
+        return querySnapshot.docs[0];
+    }
+    
+    // If not found, try nested documents.email
+    const allEmployees = await employeesRef.get();
+    for (const doc of allEmployees.docs) {
+        const data = doc.data();
+        if (data.documents && data.documents.email === email) {
+            return doc;
+        }
+    }
+    
+    return null;
+};
+
+// Helper function to get employee email (handles nested structure)
+const getEmployeeEmail = (employeeData) => {
+    return employeeData.email || (employeeData.documents && employeeData.documents.email) || null;
+};
+
+// Forgot password - Generate reset token and send email
+exports.forgotPassword = async (req, res) => {
+    console.log("forgotPassword called");
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email is required" 
+            });
+        }
+
+        // Find employee by email
+        const employeeDoc = await findEmployeeByEmail(email);
+        
+        // ✅ Security: Don't reveal if email exists or not
+        // Always return success message to prevent email enumeration
+        if (!employeeDoc) {
+            console.log(`⚠️ Password reset requested for non-existent email: ${email}`);
+            // Return success anyway to prevent email enumeration
+            return res.json({
+                success: true,
+                message: "If the email exists, a password reset link has been sent",
+                messageTh: "หากอีเมลนี้มีอยู่ในระบบ จะส่งลิงก์รีเซ็ตรหัสผ่านให้"
+            });
+        }
+
+        const employeeData = employeeDoc.data();
+        const employeeEmail = getEmployeeEmail(employeeData);
+
+        // Check if employee has a password set
+        if (!employeeData.password) {
+            console.log(`⚠️ Password reset requested for account without password: ${email}`);
+            // Still return success to prevent information disclosure
+            return res.json({
+                success: true,
+                message: "If the email exists, a password reset link has been sent",
+                messageTh: "หากอีเมลนี้มีอยู่ในระบบ จะส่งลิงก์รีเซ็ตรหัสผ่านให้"
+            });
+        }
+
+        // Generate secure reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 1); // Token expires in 1 hour
+
+        // Store reset token in Firestore
+        const passwordResetRef = db.collection('password_resets').doc();
+        await passwordResetRef.set({
+            email: employeeEmail,
+            token: resetToken,
+            expiresAt: expiresAt.toISOString(),
+            used: false,
+            createdAt: new Date().toISOString(),
+            employeeId: employeeDoc.id
+        });
+
+        // Generate reset link
+        // TODO: Replace with your actual frontend URL
+        const resetLink = `${process.env.FRONTEND_URL || 'https://your-app.com'}/reset-password?token=${resetToken}&email=${encodeURIComponent(employeeEmail)}`;
+
+        // Send email with reset link
+        // TODO: Configure your email service (SendGrid, AWS SES, Nodemailer, etc.)
+        // For now, we'll log it - you'll need to implement actual email sending
+        console.log(`📧 Password reset link for ${employeeEmail}:`);
+        console.log(`   ${resetLink}`);
+        console.log(`   Token: ${resetToken}`);
+        console.log(`   Expires at: ${expiresAt.toISOString()}`);
+
+        // TODO: Uncomment and configure when email service is set up
+        /*
+        const nodemailer = require('nodemailer');
+        const transporter = nodemailer.createTransport({
+            // Configure your email service here
+            // Example for Gmail:
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASSWORD
+            }
+        });
+
+        await transporter.sendMail({
+            from: process.env.EMAIL_FROM || 'noreply@nano-hr.com',
+            to: employeeEmail,
+            subject: 'Reset Your Password - NANO HR',
+            html: `
+                <h2>Password Reset Request</h2>
+                <p>You requested to reset your password. Click the link below to reset it:</p>
+                <p><a href="${resetLink}">Reset Password</a></p>
+                <p>This link will expire in 1 hour.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <p>Best regards,<br>NANO HR Team</p>
+            `
+        });
+        */
+
+        console.log(`✅ Password reset token generated for: ${employeeEmail}`);
+
+        res.json({
+            success: true,
+            message: "If the email exists, a password reset link has been sent",
+            messageTh: "หากอีเมลนี้มีอยู่ในระบบ จะส่งลิงก์รีเซ็ตรหัสผ่านให้"
+            // In development, you might want to return the link for testing:
+            // resetLink: process.env.NODE_ENV === 'development' ? resetLink : undefined
+        });
+
+    } catch (error) {
+        console.error("❌ Error in forgotPassword:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Failed to process password reset request",
+            messageTh: "ไม่สามารถดำเนินการรีเซ็ตรหัสผ่านได้",
+            error: error.message 
+        });
+    }
+};
+
+// Reset password - Validate token and update password
+exports.resetPassword = async (req, res) => {
+    console.log("resetPassword called");
+    try {
+        const { token, email, newPassword, confirmPassword } = req.body;
+        
+        if (!token || !email || !newPassword || !confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Token, email, new password, and confirm password are required" 
+            });
+        }
+
+        // Validate passwords match
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "New password and confirm password do not match" 
+            });
+        }
+
+        // Validate password strength
+        if (newPassword.length < 6) {
+            return res.status(400).json({ 
+                success: false,
+                message: "New password must be at least 6 characters long" 
+            });
+        }
+
+        // Find reset token in Firestore
+        const passwordResetsRef = db.collection('password_resets');
+        const querySnapshot = await passwordResetsRef
+            .where('token', '==', token)
+            .where('email', '==', email)
+            .where('used', '==', false)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.empty) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Invalid or expired reset token" 
+            });
+        }
+
+        const resetDoc = querySnapshot.docs[0];
+        const resetData = resetDoc.data();
+
+        // Check if token is expired
+        const expiresAt = new Date(resetData.expiresAt);
+        const now = new Date();
+        if (now > expiresAt) {
+            // Mark as used even though expired
+            await resetDoc.ref.update({ used: true });
+            return res.status(400).json({ 
+                success: false,
+                message: "Reset token has expired. Please request a new one." 
+            });
+        }
+
+        // Find employee
+        const employeeDoc = await findEmployeeByEmail(email);
+        if (!employeeDoc) {
+            return res.status(404).json({ 
+                success: false,
+                message: "Employee not found" 
+            });
+        }
+
+        const employeeData = employeeDoc.data();
+
+        // Update password
+        const employeeRef = db.collection("employees").doc(employeeDoc.id);
+        await employeeRef.update({
+            password: newPassword,
+            updatedAt: new Date().toISOString()
+        });
+
+        // Mark reset token as used
+        await resetDoc.ref.update({ 
+            used: true,
+            usedAt: new Date().toISOString()
+        });
+
+        console.log(`✅ Password reset successfully for: ${email}`);
+
+        res.json({
+            success: true,
+            message: "Password reset successfully",
+            messageTh: "รีเซ็ตรหัสผ่านสำเร็จ"
+        });
+
+    } catch (error) {
+        console.error("❌ Error in resetPassword:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Failed to reset password",
+            messageTh: "ไม่สามารถรีเซ็ตรหัสผ่านได้",
             error: error.message 
         });
     }
