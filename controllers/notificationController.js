@@ -194,7 +194,7 @@ const sendLeaveRequestNotification = async (req, res) => {
                                 leaveRequestId: leaveRequestId,
                                 leaveType: leaveType,
                                 leaveTypeNameEng: leaveTypeNameEng
-                            });
+                            }, managerId);  // ✅ Pass recipientId for badge count
                             results.push({ channel: 'push', ...pushResult });
                         } else {
                             console.warn(`⚠️ No device tokens found for approver ${managerId}`);
@@ -303,7 +303,8 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
                     leaveRequestId: leaveRequestId,
                     leaveType: leaveType,
                     leaveTypeNameEng: leaveTypeNameEng
-                }
+                },
+                approverEmployeeId  // ✅ Pass recipientId for badge count
             );
             results.push({ channel: 'push', ...pushResult });
         } else {
@@ -459,7 +460,7 @@ const removeInvalidTokensFromDatabase = async (invalidTokens) => {
     }
 };
 
-const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
+const sendPushNotification = async (deviceTokens, title, body, data = {}, recipientId = null) => {
     console.log(`[FCM] Received ${deviceTokens?.length || 0} raw token(s) for notification`);
     
     const sanitizedTokens = sanitizeDeviceTokens(deviceTokens);
@@ -478,6 +479,26 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
     console.log(`[FCM] Sending notification: "${title}" to ${sanitizedTokens.length} device(s)`);
 
     console.log('📨 FCM tokens:', sanitizedTokens);
+
+    // ✅ Fetch unread count for badge (if recipientId provided)
+    let badgeCount = 1; // Default to 1 if we can't fetch count
+    if (recipientId) {
+        try {
+            const unreadSnapshot = await db.collection('app_notifications')
+                .where('recipientId', '==', recipientId)
+                .where('isRead', '==', false)
+                .get();
+            const currentUnreadCount = unreadSnapshot.size;
+            // Add 1 for the new notification being sent
+            badgeCount = currentUnreadCount + 1;
+            console.log(`[FCM] 📊 Badge count for ${recipientId}: ${currentUnreadCount} unread + 1 new = ${badgeCount}`);
+        } catch (badgeError) {
+            console.warn(`[FCM] ⚠️ Failed to fetch unread count for badge: ${badgeError.message}, using default badge: 1`);
+            badgeCount = 1;
+        }
+    } else {
+        console.log(`[FCM] ℹ️ No recipientId provided, using default badge: 1`);
+    }
 
         // Prepare the message with platform-specific configuration
         // For iOS: Use notification block + APNs headers (simpler, works better)
@@ -512,7 +533,7 @@ const sendPushNotification = async (deviceTokens, title, body, data = {}) => {
                             body: body              // Required for iOS notification display
                         },
                         sound: 'default',
-                        badge: 1
+                        badge: badgeCount           // ✅ Use actual unread count
                     }
                 }
             }
@@ -831,7 +852,7 @@ const sendLeaveStatusNotification = async (req, res) => {
                                 leaveTypeNameEng: leaveTypeNameEng,
                                 employeeName: employeeName,
                                 positionName: positionName
-                            });
+                            }, employeeId);  // ✅ Pass recipientId for badge count
                             results.push({ channel: 'push', ...pushResult });
                         } else {
                             results.push({ channel: 'push', success: false, message: 'No device tokens found' });
@@ -1422,7 +1443,7 @@ const sendTestPush = async (req, res) => {
             });
         }
         
-        const result = await sendPushNotification(sanitizedTokens, title, body, { type: 'test' });
+        const result = await sendPushNotification(sanitizedTokens, title, body, { type: 'test' }, employeeId);  // ✅ Pass recipientId for badge count testing
         console.log(`📨 Test push result:`, result);
         
         return res.json({ success: true, ...result });
