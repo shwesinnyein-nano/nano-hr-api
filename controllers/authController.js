@@ -773,3 +773,130 @@ exports.mobileLogin = async (req, res) => {
         });
     }
 };
+
+// Change password endpoint
+exports.changePassword = async (req, res) => {
+    console.log("changePassword called");
+    try {
+        const { email, employeeId, currentPassword, newPassword, confirmNewPassword } = req.body;
+        
+        // Validation - require either email or employeeId
+        if (!email && !employeeId) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Email or employeeId is required" 
+            });
+        }
+
+        if (!currentPassword || !newPassword || !confirmNewPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Current password, new password, and confirm password are required" 
+            });
+        }
+
+        // Validate new password matches confirm password
+        if (newPassword !== confirmNewPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "New password and confirm password do not match" 
+            });
+        }
+
+        // Validate new password is different from current password
+        if (currentPassword === newPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "New password must be different from current password" 
+            });
+        }
+
+        // Optional: Validate password strength (minimum length)
+        if (newPassword.length < 6) {
+            return res.status(400).json({ 
+                success: false,
+                message: "New password must be at least 6 characters long" 
+            });
+        }
+
+        // Find employee by email or employeeId
+        let employeeDoc;
+        let employeeData;
+        
+        if (email) {
+            const employeesRef = db.collection("employees");
+            const querySnapshot = await employeesRef.where("email", "==", email).get();
+            
+            if (querySnapshot.empty) {
+                return res.status(404).json({ 
+                    success: false,
+                    message: "Employee not found with this email address" 
+                });
+            }
+            
+            employeeDoc = querySnapshot.docs[0];
+            employeeData = employeeDoc.data();
+        } else {
+            // Find by employeeId (document ID or uid field)
+            const employeeRef = db.collection("employees").doc(employeeId);
+            employeeDoc = await employeeRef.get();
+            
+            if (!employeeDoc.exists) {
+                // Try finding by uid field
+                const employeesRef = db.collection("employees");
+                const querySnapshot = await employeesRef.where("uid", "==", employeeId).limit(1).get();
+                
+                if (querySnapshot.empty) {
+                    return res.status(404).json({ 
+                        success: false,
+                        message: "Employee not found" 
+                    });
+                }
+                
+                employeeDoc = querySnapshot.docs[0];
+            }
+            
+            employeeData = employeeDoc.data();
+        }
+
+        // Check if employee has a password set
+        if (!employeeData.password) {
+            return res.status(400).json({ 
+                success: false,
+                message: "No password set for this account. Please register first." 
+            });
+        }
+
+        // Verify current password
+        if (employeeData.password !== currentPassword) {
+            return res.status(401).json({ 
+                success: false,
+                message: "Current password is incorrect" 
+            });
+        }
+
+        // Update password in Firestore
+        const employeeRef = db.collection("employees").doc(employeeDoc.id);
+        await employeeRef.update({
+            password: newPassword,
+            updatedAt: new Date().toISOString()
+        });
+
+        console.log(`✅ Password changed successfully for employee: ${employeeData.email || employeeId}`);
+
+        res.json({
+            success: true,
+            message: "Password changed successfully",
+            messageTh: "เปลี่ยนรหัสผ่านสำเร็จ"
+        });
+
+    } catch (error) {
+        console.error("❌ Error in changePassword:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Failed to change password",
+            messageTh: "ไม่สามารถเปลี่ยนรหัสผ่านได้",
+            error: error.message 
+        });
+    }
+};

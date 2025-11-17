@@ -11,6 +11,7 @@ router.post("/mobile-login", authController.mobileLogin); // NEW: Mobile login w
 router.post("/login-user", authController.loginUser); // NEW LOGIN ENDPOINT
 router.post("/register-user", authController.registerUser); // NEW REGISTER ENDPOINT
 router.post("/check-email", authController.checkEmail); // CHECK EMAIL EXISTS
+router.post("/change-password", authController.changePassword); // CHANGE PASSWORD
 router.get("/verify-token", authController.verifyToken);
 router.get("/employee/:authId", authController.getEmployeeByAuthId);
 
