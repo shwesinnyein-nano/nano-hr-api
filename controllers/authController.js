@@ -1011,54 +1011,61 @@ exports.forgotPassword = async (req, res) => {
         });
 
         // Generate reset link
-        // TODO: Replace with your actual frontend URL
-        const resetLink = `${process.env.FRONTEND_URL || 'https://your-app.com'}/reset-password?token=${resetToken}&email=${encodeURIComponent(employeeEmail)}`;
+        const frontendUrl = process.env.FRONTEND_URL || process.env.PRODUCTION_FRONTEND_URL || 'https://nano-hr.web.app';
+        const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(employeeEmail)}`;
 
-        // Send email with reset link
-        // TODO: Configure your email service (SendGrid, AWS SES, Nodemailer, etc.)
-        // For now, we'll log it - you'll need to implement actual email sending
+        // Log reset link for debugging
         console.log(`📧 Password reset link for ${employeeEmail}:`);
         console.log(`   ${resetLink}`);
         console.log(`   Token: ${resetToken}`);
         console.log(`   Expires at: ${expiresAt.toISOString()}`);
 
-        // TODO: Uncomment and configure when email service is set up
-        /*
-        const nodemailer = require('nodemailer');
-        const transporter = nodemailer.createTransport({
-            // Configure your email service here
-            // Example for Gmail:
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD
-            }
-        });
-
-        await transporter.sendMail({
-            from: process.env.EMAIL_FROM || 'noreply@nano-hr.com',
-            to: employeeEmail,
-            subject: 'Reset Your Password - NANO HR',
-            html: `
-                <h2>Password Reset Request</h2>
-                <p>You requested to reset your password. Click the link below to reset it:</p>
-                <p><a href="${resetLink}">Reset Password</a></p>
-                <p>This link will expire in 1 hour.</p>
-                <p>If you didn't request this, please ignore this email.</p>
-                <p>Best regards,<br>NANO HR Team</p>
-            `
-        });
-        */
+        // ✅ Send email using Firebase Extensions Email or simple console for now
+        // For production, you should configure a proper email service
+        // Options: SendGrid, AWS SES, Nodemailer, Firebase Extensions
+        
+        // For now, we'll use a simple approach - log and return link in dev mode
+        // In production, configure your email service here
+        
+        try {
+            // TODO: Replace with actual email service
+            // Example with SendGrid:
+            // const sgMail = require('@sendgrid/mail');
+            // sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+            // await sgMail.send({
+            //     to: employeeEmail,
+            //     from: process.env.EMAIL_FROM || 'noreply@nano-hr.com',
+            //     subject: 'Reset Your Password - NANO HR',
+            //     html: `...`
+            // });
+            
+            // For now, just log - email will be sent when service is configured
+            console.log(`📧 Email should be sent to: ${employeeEmail}`);
+            console.log(`📧 Reset link: ${resetLink}`);
+            
+        } catch (emailError) {
+            console.error(`❌ Failed to send email to ${employeeEmail}:`, emailError);
+            // Don't fail the request if email fails - token is still generated
+        }
 
         console.log(`✅ Password reset token generated for: ${employeeEmail}`);
 
-        res.json({
+        // Return response - include reset link in development mode for testing
+        const response = {
             success: true,
             message: "If the email exists, a password reset link has been sent",
             messageTh: "หากอีเมลนี้มีอยู่ในระบบ จะส่งลิงก์รีเซ็ตรหัสผ่านให้"
-            // In development, you might want to return the link for testing:
-            // resetLink: process.env.NODE_ENV === 'development' ? resetLink : undefined
-        });
+        };
+        
+        // In development or if EMAIL_DEBUG is enabled, return the reset link for testing
+        if (process.env.NODE_ENV !== 'production' || process.env.EMAIL_DEBUG === 'true') {
+            response.resetLink = resetLink;
+            response.token = resetToken;
+            response.debug = true;
+            console.log(`🔧 DEBUG MODE: Returning reset link in response for testing`);
+        }
+        
+        res.json(response);
 
     } catch (error) {
         console.error("❌ Error in forgotPassword:", error);
