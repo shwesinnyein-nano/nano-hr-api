@@ -3,6 +3,7 @@ const qrcode = require("qrcode");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { admin, db } = require("../config/firebaseConfig");
+const { sendPushNotification } = require("./notificationController");
 
 exports.sendOTP = async (req, res) => {
     try {
@@ -952,117 +953,143 @@ const getEmployeeEmail = (employeeData) => {
     return employeeData.email || (employeeData.documents && employeeData.documents.email) || null;
 };
 
-// Forgot password - Generate reset token and send email
+// Forgot password - Generate OTP and send via FCM push notification
 exports.forgotPassword = async (req, res) => {
     console.log("forgotPassword called");
     try {
-        const { email } = req.body;
+        const { email, employeeId } = req.body;
         
-        if (!email) {
+        // Accept either email or employeeId
+        if (!email && !employeeId) {
             return res.status(400).json({ 
                 success: false,
-                message: "Email is required" 
+                message: "Email or employeeId is required" 
             });
         }
 
-        // Find employee by email
-        const employeeDoc = await findEmployeeByEmail(email);
+        // Find employee by email or employeeId
+        let employeeDoc;
+        if (email) {
+            employeeDoc = await findEmployeeByEmail(email);
+        } else {
+            // Find by employeeId
+            const employeeRef = db.collection("employees").doc(employeeId);
+            employeeDoc = await employeeRef.get();
+            if (!employeeDoc.exists) {
+                const employeesRef = db.collection("employees");
+                const querySnapshot = await employeesRef.where("uid", "==", employeeId).limit(1).get();
+                if (!querySnapshot.empty) {
+                    employeeDoc = querySnapshot.docs[0];
+                } else {
+                    employeeDoc = null;
+                }
+            } else {
+                employeeDoc = { id: employeeRef.id, data: () => employeeDoc.data(), exists: true };
+            }
+        }
         
-        // ✅ Security: Don't reveal if email exists or not
-        // Always return success message to prevent email enumeration
-        if (!employeeDoc) {
-            console.log(`⚠️ Password reset requested for non-existent email: ${email}`);
-            // Return success anyway to prevent email enumeration
+        // ✅ Security: Don't reveal if email/employeeId exists or not
+        // Always return success message to prevent enumeration
+        if (!employeeDoc || (employeeDoc.exists !== undefined && !employeeDoc.exists)) {
+            console.log(`⚠️ Password reset requested for non-existent: ${email || employeeId}`);
             return res.json({
                 success: true,
-                message: "If the email exists, a password reset link has been sent",
-                messageTh: "หากอีเมลนี้มีอยู่ในระบบ จะส่งลิงก์รีเซ็ตรหัสผ่านให้"
+                message: "If the account exists, a password reset OTP has been sent to your device",
+                messageTh: "หากบัญชีนี้มีอยู่ในระบบ จะส่งรหัส OTP ไปยังอุปกรณ์ของคุณ"
             });
         }
 
-        const employeeData = employeeDoc.data();
+        const employeeData = employeeDoc.data ? employeeDoc.data() : employeeDoc;
         const employeeEmail = getEmployeeEmail(employeeData);
 
         // Check if employee has a password set
         if (!employeeData.password) {
-            console.log(`⚠️ Password reset requested for account without password: ${email}`);
-            // Still return success to prevent information disclosure
+            console.log(`⚠️ Password reset requested for account without password: ${email || employeeId}`);
             return res.json({
                 success: true,
-                message: "If the email exists, a password reset link has been sent",
-                messageTh: "หากอีเมลนี้มีอยู่ในระบบ จะส่งลิงก์รีเซ็ตรหัสผ่านให้"
+                message: "If the account exists, a password reset OTP has been sent to your device",
+                messageTh: "หากบัญชีนี้มีอยู่ในระบบ จะส่งรหัส OTP ไปยังอุปกรณ์ของคุณ"
             });
         }
 
-        // Generate secure reset token
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 1); // Token expires in 1 hour
+        // Check if employee has FCM device tokens
+        const deviceTokens = employeeData.deviceTokens || [];
+        if (!deviceTokens || deviceTokens.length === 0) {
+            console.log(`⚠️ No device tokens found for password reset: ${email || employeeId}`);
+            // Still return success to prevent information disclosure
+            return res.json({
+                success: true,
+                message: "If the account exists, a password reset OTP has been sent to your device",
+                messageTh: "หากบัญชีนี้มีอยู่ในระบบ จะส่งรหัส OTP ไปยังอุปกรณ์ของคุณ",
+                // In debug mode, inform about missing tokens
+                ...(process.env.NODE_ENV !== 'production' && {
+                    debug: "No device tokens found - user needs to have app installed and logged in"
+                })
+            });
+        }
 
-        // Store reset token in Firestore
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 10); // OTP expires in 10 minutes
+
+        // Store OTP in Firestore
         const passwordResetRef = db.collection('password_resets').doc();
         await passwordResetRef.set({
             email: employeeEmail,
-            token: resetToken,
+            employeeId: employeeDoc.id || employeeId,
+            otp: otp,
             expiresAt: expiresAt.toISOString(),
             used: false,
             createdAt: new Date().toISOString(),
-            employeeId: employeeDoc.id
+            method: 'fcm' // Mark as FCM method
         });
 
-        // Generate reset link
-        const frontendUrl = process.env.FRONTEND_URL || process.env.PRODUCTION_FRONTEND_URL || 'https://nano-hr.web.app';
-        const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(employeeEmail)}`;
-
-        // Log reset link for debugging
-        console.log(`📧 Password reset link for ${employeeEmail}:`);
-        console.log(`   ${resetLink}`);
-        console.log(`   Token: ${resetToken}`);
-        console.log(`   Expires at: ${expiresAt.toISOString()}`);
-
-        // ✅ Send email using Firebase Extensions Email or simple console for now
-        // For production, you should configure a proper email service
-        // Options: SendGrid, AWS SES, Nodemailer, Firebase Extensions
-        
-        // For now, we'll use a simple approach - log and return link in dev mode
-        // In production, configure your email service here
+        // Send FCM push notification with OTP
+        const notificationTitle = "Password Reset Code";
+        const notificationBody = `Your password reset OTP is: ${otp}`;
         
         try {
-            // TODO: Replace with actual email service
-            // Example with SendGrid:
-            // const sgMail = require('@sendgrid/mail');
-            // sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-            // await sgMail.send({
-            //     to: employeeEmail,
-            //     from: process.env.EMAIL_FROM || 'noreply@nano-hr.com',
-            //     subject: 'Reset Your Password - NANO HR',
-            //     html: `...`
-            // });
-            
-            // For now, just log - email will be sent when service is configured
-            console.log(`📧 Email should be sent to: ${employeeEmail}`);
-            console.log(`📧 Reset link: ${resetLink}`);
-            
-        } catch (emailError) {
-            console.error(`❌ Failed to send email to ${employeeEmail}:`, emailError);
-            // Don't fail the request if email fails - token is still generated
+            const pushResult = await sendPushNotification(
+                deviceTokens,
+                notificationTitle,
+                notificationBody,
+                {
+                    type: 'password_reset',
+                    otp: otp,
+                    email: employeeEmail,
+                    employeeId: employeeDoc.id || employeeId,
+                    expiresAt: expiresAt.toISOString()
+                },
+                employeeDoc.id || employeeId
+            );
+
+            if (pushResult.success) {
+                console.log(`✅ Password reset OTP sent via FCM to ${employeeEmail}`);
+                console.log(`   OTP: ${otp}`);
+                console.log(`   Expires at: ${expiresAt.toISOString()}`);
+            } else {
+                console.error(`❌ Failed to send FCM notification:`, pushResult.message);
+                // Don't fail the request - OTP is still generated
+            }
+        } catch (fcmError) {
+            console.error(`❌ Error sending FCM notification:`, fcmError);
+            // Don't fail the request - OTP is still generated and stored
         }
 
-        console.log(`✅ Password reset token generated for: ${employeeEmail}`);
-
-        // Return response - include reset link in development mode for testing
+        // Return response
         const response = {
             success: true,
-            message: "If the email exists, a password reset link has been sent",
-            messageTh: "หากอีเมลนี้มีอยู่ในระบบ จะส่งลิงก์รีเซ็ตรหัสผ่านให้"
+            message: "If the account exists, a password reset OTP has been sent to your device",
+            messageTh: "หากบัญชีนี้มีอยู่ในระบบ จะส่งรหัส OTP ไปยังอุปกรณ์ของคุณ"
         };
         
-        // In development or if EMAIL_DEBUG is enabled, return the reset link for testing
+        // In development mode, return OTP for testing (remove in production!)
         if (process.env.NODE_ENV !== 'production' || process.env.EMAIL_DEBUG === 'true') {
-            response.resetLink = resetLink;
-            response.token = resetToken;
+            response.otp = otp; // ⚠️ Only for testing - remove in production!
+            response.expiresAt = expiresAt.toISOString();
             response.debug = true;
-            console.log(`🔧 DEBUG MODE: Returning reset link in response for testing`);
+            console.log(`🔧 DEBUG MODE: Returning OTP in response for testing`);
         }
         
         res.json(response);
@@ -1078,55 +1105,60 @@ exports.forgotPassword = async (req, res) => {
     }
 };
 
-// Reset password - Validate token and update password
-exports.resetPassword = async (req, res) => {
-    console.log("resetPassword called");
+// Verify reset OTP - Validate OTP before allowing password reset
+exports.verifyResetOTP = async (req, res) => {
+    console.log("verifyResetOTP called");
     try {
-        const { token, email, newPassword, confirmPassword } = req.body;
+        const { email, employeeId, otp } = req.body;
         
-        if (!token || !email || !newPassword || !confirmPassword) {
+        if (!otp || (!email && !employeeId)) {
             return res.status(400).json({ 
                 success: false,
-                message: "Token, email, new password, and confirm password are required" 
+                message: "OTP and email or employeeId are required" 
             });
         }
 
-        // Validate passwords match
-        if (newPassword !== confirmPassword) {
-            return res.status(400).json({ 
-                success: false,
-                message: "New password and confirm password do not match" 
-            });
-        }
-
-        // Validate password strength
-        if (newPassword.length < 6) {
-            return res.status(400).json({ 
-                success: false,
-                message: "New password must be at least 6 characters long" 
-            });
-        }
-
-        // Find reset token in Firestore
+        // Find reset OTP in Firestore (without orderBy to avoid index requirement)
         const passwordResetsRef = db.collection('password_resets');
-        const querySnapshot = await passwordResetsRef
-            .where('token', '==', token)
-            .where('email', '==', email)
-            .where('used', '==', false)
-            .limit(1)
-            .get();
+        let querySnapshot;
+        
+        if (email) {
+            querySnapshot = await passwordResetsRef
+                .where('email', '==', email)
+                .where('otp', '==', otp)
+                .where('used', '==', false)
+                .get();
+        } else {
+            querySnapshot = await passwordResetsRef
+                .where('employeeId', '==', employeeId)
+                .where('otp', '==', otp)
+                .where('used', '==', false)
+                .get();
+        }
+        
+        // Get the most recent one (if multiple exist)
+        let resetDoc = null;
+        if (!querySnapshot.empty) {
+            // Sort by createdAt descending and get the first one
+            const docs = querySnapshot.docs.sort((a, b) => {
+                const aTime = new Date(a.data().createdAt).getTime();
+                const bTime = new Date(b.data().createdAt).getTime();
+                return bTime - aTime;
+            });
+            resetDoc = docs[0];
+        }
 
-        if (querySnapshot.empty) {
+        if (!resetDoc) {
             return res.status(400).json({ 
                 success: false,
-                message: "Invalid or expired reset token" 
+                message: "Invalid or expired OTP",
+                messageTh: "รหัส OTP ไม่ถูกต้องหรือหมดอายุแล้ว"
             });
         }
 
-        const resetDoc = querySnapshot.docs[0];
         const resetData = resetDoc.data();
 
-        // Check if token is expired
+        // Check if OTP is expired
         const expiresAt = new Date(resetData.expiresAt);
         const now = new Date();
         if (now > expiresAt) {
@@ -1134,35 +1166,159 @@ exports.resetPassword = async (req, res) => {
             await resetDoc.ref.update({ used: true });
             return res.status(400).json({ 
                 success: false,
-                message: "Reset token has expired. Please request a new one." 
+                message: "OTP has expired. Please request a new one.",
+                messageTh: "รหัส OTP หมดอายุแล้ว กรุณาขอรหัสใหม่"
+            });
+        }
+
+        // OTP is valid
+        console.log(`✅ OTP verified for: ${resetData.email || resetData.employeeId}`);
+
+        res.json({
+            success: true,
+            message: "OTP verified successfully",
+            messageTh: "ยืนยันรหัส OTP สำเร็จ",
+            verified: true
+        });
+
+    } catch (error) {
+        console.error("❌ Error in verifyResetOTP:", error);
+        res.status(500).json({ 
+            success: false,
+            message: "Failed to verify OTP",
+            messageTh: "ไม่สามารถยืนยันรหัส OTP ได้",
+            error: error.message 
+        });
+    }
+};
+
+// Reset password - Validate OTP and update password
+exports.resetPassword = async (req, res) => {
+    console.log("resetPassword called");
+    try {
+        const { email, employeeId, otp, newPassword, confirmPassword } = req.body;
+        
+        if (!otp || (!email && !employeeId) || !newPassword || !confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "OTP, email or employeeId, new password, and confirm password are required" 
+            });
+        }
+
+        // Validate passwords match
+        if (newPassword !== confirmPassword) {
+            return res.status(400).json({ 
+                success: false,
+                message: "New password and confirm password do not match",
+                messageTh: "รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน"
+            });
+        }
+
+        // Validate password strength
+        if (newPassword.length < 6) {
+            return res.status(400).json({ 
+                success: false,
+                message: "New password must be at least 6 characters long",
+                messageTh: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"
+            });
+        }
+
+        // Find reset OTP in Firestore (without orderBy to avoid index requirement)
+        const passwordResetsRef = db.collection('password_resets');
+        let querySnapshot;
+        
+        if (email) {
+            querySnapshot = await passwordResetsRef
+                .where('email', '==', email)
+                .where('otp', '==', otp)
+                .where('used', '==', false)
+                .get();
+        } else {
+            querySnapshot = await passwordResetsRef
+                .where('employeeId', '==', employeeId)
+                .where('otp', '==', otp)
+                .where('used', '==', false)
+                .get();
+        }
+        
+        // Get the most recent one (if multiple exist)
+        let resetDoc = null;
+        if (!querySnapshot.empty) {
+            // Sort by createdAt descending and get the first one
+            const docs = querySnapshot.docs.sort((a, b) => {
+                const aTime = new Date(a.data().createdAt).getTime();
+                const bTime = new Date(b.data().createdAt).getTime();
+                return bTime - aTime;
+            });
+            resetDoc = docs[0];
+        }
+
+        if (!resetDoc) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Invalid or expired OTP",
+                messageTh: "รหัส OTP ไม่ถูกต้องหรือหมดอายุแล้ว"
+            });
+        }
+
+        const resetData = resetDoc.data();
+
+        // Check if OTP is expired
+        const expiresAt = new Date(resetData.expiresAt);
+        const now = new Date();
+        if (now > expiresAt) {
+            // Mark as used even though expired
+            await resetDoc.ref.update({ used: true });
+            return res.status(400).json({ 
+                success: false,
+                message: "OTP has expired. Please request a new one.",
+                messageTh: "รหัส OTP หมดอายุแล้ว กรุณาขอรหัสใหม่"
             });
         }
 
         // Find employee
-        const employeeDoc = await findEmployeeByEmail(email);
+        let employeeDoc;
+        if (email) {
+            employeeDoc = await findEmployeeByEmail(email);
+        } else {
+            const employeeRef = db.collection("employees").doc(employeeId);
+            const doc = await employeeRef.get();
+            if (doc.exists) {
+                employeeDoc = { id: employeeRef.id, data: () => doc.data() };
+            } else {
+                const employeesRef = db.collection("employees");
+                const querySnapshot = await employeesRef.where("uid", "==", employeeId).limit(1).get();
+                if (!querySnapshot.empty) {
+                    employeeDoc = querySnapshot.docs[0];
+                }
+            }
+        }
+
         if (!employeeDoc) {
             return res.status(404).json({ 
                 success: false,
-                message: "Employee not found" 
+                message: "Employee not found",
+                messageTh: "ไม่พบข้อมูลพนักงาน"
             });
         }
 
-        const employeeData = employeeDoc.data();
+        const employeeData = employeeDoc.data ? employeeDoc.data() : employeeDoc;
+        const employeeIdToUpdate = employeeDoc.id || employeeId;
 
         // Update password
-        const employeeRef = db.collection("employees").doc(employeeDoc.id);
+        const employeeRef = db.collection("employees").doc(employeeIdToUpdate);
         await employeeRef.update({
             password: newPassword,
             updatedAt: new Date().toISOString()
         });
 
-        // Mark reset token as used
+        // Mark OTP as used
         await resetDoc.ref.update({ 
             used: true,
             usedAt: new Date().toISOString()
         });
 
-        console.log(`✅ Password reset successfully for: ${email}`);
+        console.log(`✅ Password reset successfully for: ${resetData.email || employeeId}`);
 
         res.json({
             success: true,
