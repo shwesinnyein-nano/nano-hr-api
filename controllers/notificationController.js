@@ -165,7 +165,7 @@ const sendLeaveRequestNotification = async (req, res) => {
             return fromDate || toDate || '';
         })();
         const leaveLabel = leaveTypeNameEng ? `${leaveTypeNameEng} (${leaveType})` : leaveType;
-        const defaultMessage = `${employeeName} has requested ${leaveLabel} leave${dateRange ? ` (${dateRange})` : ''}.${reason ? ` Reason: ${reason}` : ''}`;
+        const defaultMessage = `${employeeName} has requested ${leaveLabel} leave${dateRange ? ` (${dateRange})` : ''}.`;
         const title = titleOverride || defaultTitle;
         const message = messageOverride || defaultMessage;
 
@@ -213,7 +213,7 @@ const sendLeaveRequestNotification = async (req, res) => {
                     case NOTIFICATION_CHANNELS.IN_APP:
                         // ✅ Build Thai messages for leave request notification
                         const titleTh = `การแจ้งเตือนการขอลา`;
-                        const messageTh = `${employeeName} ส่งคำขอ ${leaveLabel}${dateRange ? ` (${dateRange})` : ''}.${reason ? ` เหตุผล: ${reason}` : ''} กรุณาตรวจสอบ.`;
+                        const messageTh = `${employeeName} ส่งคำขอ ${leaveLabel}${dateRange ? ` (${dateRange})` : ''}. กรุณาตรวจสอบ.`;
                         const inAppResult = await createInAppNotification(
                             managerId,
                             title,
@@ -264,6 +264,7 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
     titleTh = null,
     messageTh = null,
     employeeId,
+    employeeName = null,
     leaveRequestId,
     leaveType,
     leaveTypeNameEng,
@@ -331,7 +332,23 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
         // ✅ Generate Thai messages if not provided
         const finalTitleTh = titleTh || `การแจ้งเตือนการขอลา`;
         const finalMessageTh = messageTh || (() => {
-            const employeeName = employeeId || 'An employee';
+            // Extract employee name from title or message, or use provided employeeName
+            let safeEmployeeName = employeeName;
+            if (!safeEmployeeName && title) {
+                // Try to extract from title: "New Leave Request from {Name}"
+                const match = title.match(/from (.+)$/i);
+                if (match) {
+                    safeEmployeeName = match[1].trim();
+                }
+            }
+            if (!safeEmployeeName && message) {
+                // Try to extract from message: "{Name} has requested..."
+                const match = message.match(/^([^h]+?)\s+has requested/i);
+                if (match) {
+                    safeEmployeeName = match[1].trim();
+                }
+            }
+            safeEmployeeName = safeEmployeeName || employeeId || 'An employee';
             const leaveLabel = leaveTypeNameEng ? `${leaveTypeNameEng} (${leaveType})` : leaveType;
             const dateRange = (() => {
                 if (fromDate && toDate) {
@@ -340,7 +357,7 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
                 }
                 return fromDate || toDate || '';
             })();
-            return `${employeeName} ส่งคำขอ ${leaveLabel}${dateRange ? ` (${dateRange})` : ''}.${reason ? ` เหตุผล: ${reason}` : ''} กรุณาตรวจสอบ.`;
+            return `${safeEmployeeName} ส่งคำขอ ${leaveLabel}${dateRange ? ` (${dateRange})` : ''}. กรุณาตรวจสอบ.`;
         })();
         
         const inAppResult = await createInAppNotification(
