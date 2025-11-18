@@ -12,7 +12,7 @@ let bucket;
 const initializeFirebaseStorage = async () => {
     try {
         if (admin.apps.length === 0) {
-            console.error("❌ Firebase Admin not initialized");
+           
             return null;
         }
         
@@ -22,11 +22,11 @@ const initializeFirebaseStorage = async () => {
         try {
             const [exists] = await bucket.exists();
             if (!exists) {
-                console.error("❌ Storage bucket does not exist");
+               
                 return null;
             }
         } catch (bucketError) {
-            console.error("❌ Error checking bucket existence:", bucketError);
+            
             return null;
         }
         
@@ -135,8 +135,8 @@ const buildApproverNotificationContent = (level, { employeeName, leaveTypeName, 
             return {
                 title: `Leave Request Notification`,
                 titleTh: `การแจ้งเตือนการขอลา`,
-
-                message: `${safeEmployeeName} requested ${leaveLabel}${rangeText}. Please check it out.`
+                message: `${safeEmployeeName} requested ${leaveLabel}${rangeText}. Please check it out.`,
+                messageTh: `${safeEmployeeName} ส่งคำขอ ${leaveLabel} ${rangeText}. กรุณาตรวจสอบ.`
             };
         case 'manager':
             return {
@@ -1312,12 +1312,12 @@ const updateLeaveRequestStatus = async (req, res) => {
                                 // Ensure recipientId is correct
                                 
                                 // Create HR notification
+                                const titleTh = `การแจ้งเตือนการขอลา`;
+                                const messageTh = `${safeEmployeeName} ส่งคำขอ ${leaveLabel} ${rangeText}. กรุณาตรวจสอบ.`;
                                 createInAppNotification(
                                     hrData.uid,
                                     'Leave Request Notification',
                                     `${safeEmployeeName} submitted a ${leaveLabel} request ${rangeText}. Please check it out.`,
-
-                                    //`${approverData.firstName} ${approverData.lastName} approved ${leaveData.leaveTypeName} request from employee ${leaveData.employeeId}`,
                                     'leave_approved_by_manager',
                                     {
                                         leaveRequestId: leaveId, // Include leave request ID for navigation
@@ -1327,7 +1327,9 @@ const updateLeaveRequestStatus = async (req, res) => {
                                         leaveType: leaveData.leaveTypeName,
                                         fromDate: leaveData.fromDate,
                                         toDate: leaveData.toDate
-                                    }
+                                    },
+                                    titleTh,
+                                    messageTh
                                 ).catch(hrNotifError => {
                                     console.error(`❌ Failed to send HR notification:`, hrNotifError);
                                 });
@@ -1825,7 +1827,9 @@ const approveLeaveRequest = async (req, res) => {
                                 fromDate: leaveData.fromDate || leaveData.date,
                                 toDate: leaveData.toDate || leaveData.date,
                                 comment: comment
-                            }
+                            },
+                            hrNotification.titleTh,
+                            hrNotification.messageTh
                         ).catch(hrNotifError => {
                             console.error(`❌ Failed to send HR notification:`, hrNotifError);
                         });
@@ -1876,6 +1880,7 @@ const approveLeaveRequest = async (req, res) => {
                         const hrData = hrDoc.data();
                     
                         const messageTh = `${approverName} อนุมัติคำขอ ${leaveData.leaveTypeName} จากพนักงาน ${leaveData.employeeId}`;
+                        const titleTh = hrNotification.titleTh || `การแจ้งเตือนการขอลา`;
 
                         // Create HR notification
                         createInAppNotification(
@@ -1892,7 +1897,9 @@ const approveLeaveRequest = async (req, res) => {
                                 fromDate: leaveData.fromDate || leaveData.date,
                                 toDate: leaveData.toDate || leaveData.date,
                                 comment: comment
-                            }
+                            },
+                            titleTh,
+                            messageTh
                         ).catch(hrNotifError => {
                             console.error(`❌ Failed to send HR notification:`, hrNotifError);
                         });
@@ -1957,7 +1964,9 @@ const approveLeaveRequest = async (req, res) => {
                                 fromDate: leaveData.fromDate || leaveData.date,
                                 toDate: leaveData.toDate || leaveData.date,
                                 comment: comment
-                            }
+                            },
+                            approverNotification.titleTh,
+                            approverNotification.messageTh
                         ).catch(approverNotifError => {
                             console.error(`❌ Failed to send Approver notification:`, approverNotifError);
                         });

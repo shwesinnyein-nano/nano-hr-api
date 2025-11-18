@@ -56,7 +56,7 @@ const createNotificationRecord = async (notificationData) => {
 
 
 // Create in-app notification
-const createInAppNotification = async (recipientId, title, message, type, data = {}) => {
+const createInAppNotification = async (recipientId, title, message, type, data = {}, titleTh = null, messageTh = null) => {
    
     try {
         // Ensure all fields in the data object are defined
@@ -73,6 +73,14 @@ const createInAppNotification = async (recipientId, title, message, type, data =
             channels: [NOTIFICATION_CHANNELS.IN_APP],
             isRead: false
         };
+
+        // ✅ Add Thai messages if provided
+        if (titleTh) {
+            notificationData.titleTh = titleTh;
+        }
+        if (messageTh) {
+            notificationData.messageTh = messageTh;
+        }
 
         // Create notification record
         const savedNotification = await createNotificationRecord(notificationData);
@@ -203,12 +211,17 @@ const sendLeaveRequestNotification = async (req, res) => {
                         break;
 
                     case NOTIFICATION_CHANNELS.IN_APP:
+                        // ✅ Build Thai messages for leave request notification
+                        const titleTh = `การแจ้งเตือนการขอลา`;
+                        const messageTh = `${employeeName} ส่งคำขอ ${leaveLabel}${dateRange ? ` (${dateRange})` : ''}.${reason ? ` เหตุผล: ${reason}` : ''} กรุณาตรวจสอบ.`;
                         const inAppResult = await createInAppNotification(
                             managerId,
                             title,
                             message,
                             NOTIFICATION_TYPES.LEAVE_REQUEST,
-                            { employeeId, leaveRequestId, leaveType, leaveTypeNameEng, fromDate, toDate, reason }
+                            { employeeId, leaveRequestId, leaveType, leaveTypeNameEng, fromDate, toDate, reason },
+                            titleTh,
+                            messageTh
                         );
                         results.push({ channel: 'in_app', notification: inAppResult });
                         break;
@@ -248,6 +261,8 @@ const sendLeaveRequestNotification = async (req, res) => {
 const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
     title,
     message,
+    titleTh = null,
+    messageTh = null,
     employeeId,
     leaveRequestId,
     leaveType,
@@ -313,6 +328,21 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
         }
 
         // Send in-app notification
+        // ✅ Generate Thai messages if not provided
+        const finalTitleTh = titleTh || `การแจ้งเตือนการขอลา`;
+        const finalMessageTh = messageTh || (() => {
+            const employeeName = employeeId || 'An employee';
+            const leaveLabel = leaveTypeNameEng ? `${leaveTypeNameEng} (${leaveType})` : leaveType;
+            const dateRange = (() => {
+                if (fromDate && toDate) {
+                    if (fromDate === toDate) return fromDate;
+                    return `${fromDate} - ${toDate}`;
+                }
+                return fromDate || toDate || '';
+            })();
+            return `${employeeName} ส่งคำขอ ${leaveLabel}${dateRange ? ` (${dateRange})` : ''}.${reason ? ` เหตุผล: ${reason}` : ''} กรุณาตรวจสอบ.`;
+        })();
+        
         const inAppResult = await createInAppNotification(
             approverEmployeeId,
             title,
@@ -326,7 +356,9 @@ const sendLeaveRequestNotificationToApprover = async (approverEmployeeId, {
                 fromDate,
                 toDate,
                 reason
-            }
+            },
+            finalTitleTh,
+            finalMessageTh
         );
         results.push({ channel: 'in_app', notification: inAppResult });
 
@@ -878,7 +910,9 @@ const sendLeaveStatusNotification = async (req, res) => {
                                 firstName,
                                 lastName,
                                 positionName
-                            }
+                            },
+                            titleTh,
+                            messageTh
                         );
                         results.push({ channel: 'in_app', notification: inAppResult });
                         break;
