@@ -881,7 +881,22 @@ const sendLeaveStatusNotification = async (req, res) => {
         const title = `Leave Request ${statusLabel}`;
         const titleTh = `การแจ้งเตือนการขอลา ${statusLabel}`;
         const reasonPart = reason ? ` Reason: ${reason}` : '';
-        const message = `Your leave request has been ${statusLabel}.${reasonPart}`;
+        
+        // ✅ Format message: "approved by HR", "approved by manager", etc.
+        let messageStatusText = statusLabel.toLowerCase();
+        if (status === 'approved_hr' || statusName === 'Approved by HR') {
+            messageStatusText = 'approved by HR';
+        } else if (status === 'approved_manager' || statusName === 'Approved by Manager') {
+            messageStatusText = 'approved by manager';
+        } else if (status === 'approved_team_lead' || statusName === 'Approved by Team Lead') {
+            messageStatusText = 'approved by team lead';
+        } else if (status === 'approved' || statusName === 'Approved') {
+            messageStatusText = 'approved';
+        } else if (status === 'rejected' || statusName === 'Rejected') {
+            messageStatusText = 'rejected';
+        }
+        
+        const message = `Your leave request has been ${messageStatusText}.${reasonPart}`;
         const messageTh = `การขอลาของคุณได้รับการ${statusLabel}.${reason ? ` เหตุผล: ${reason}` : ''}`;
 
         const results = [];
