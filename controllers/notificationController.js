@@ -921,9 +921,9 @@ const sendLeaveStatusNotification = async (req, res) => {
         }
         
         const title = `Leave Request ${titleStatusText}`;
-        const titleTh = `การแจ้งเตือนการขอลา ${statusLabel}`;
-        const message = `Your leave request has been ${messageStatusText}.${reasonPart}`;
-        const messageTh = `การขอลาของคุณได้รับการ${statusLabel}.${reason ? ` เหตุผล: ${reason}` : ''}`;
+        const titleTh = `การแจ้งเตือนการขอลา ${titleStatusTextTh}`;
+        const message = `Your leave request has been ${messageStatusText}.`;
+        const messageTh = `การขอลาของคุณได้รับการ${messageStatusTextTh}.`;
 
         const results = [];
 
