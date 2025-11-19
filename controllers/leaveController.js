@@ -3,8 +3,12 @@ const { v4: uuidv4 } = require('uuid');
 const { sendLeaveRequestNotification, sendLeaveRequestNotificationToApprover, sendLeaveStatusNotification, createInAppNotification, findEmployeeDocRef } = require('./notificationController');
 
 const getEmployeeNotificationChannels = (status) => {
-    const finalStatuses = ['approved', 'rejected', 'cancelled'];
-    return finalStatuses.includes(status) ? ['in_app', 'push'] : ['push'];
+    // ✅ Include in_app notification for all approval/rejection statuses
+    // This includes: 'approved', 'approved_team_lead', 'approved_manager', 'approved_hr', 'rejected', 'cancelled'
+    if (status && (status.includes('approved') || status.includes('rejected') || status === 'cancelled')) {
+        return ['in_app', 'push'];
+    }
+    return ['push'];
 };
 
 // Initialize Firebase Storage with better error handling
@@ -1929,72 +1933,8 @@ const approveLeaveRequest = async (req, res) => {
                 }
             }
             
-            // If approved by HR, also notify final Approver
-            if (action === 'approve' && userApprovalLevel === 'hr') {
-                
-                // Get HR data for notification
-                const employeesRef = db.collection("employees");
-                const hrApproverQuery = await employeesRef.where("uid", "==", userId).get();
-                
-                let hrApproverName = userId;
-                if (!hrApproverQuery.empty) {
-                    const hrApproverData = hrApproverQuery.docs[0].data();
-                    hrApproverName = `${hrApproverData.firstName} ${hrApproverData.lastName}`;
-                }
-                
-                // Find final Approver personnel by role (support multiple approver roles)
-                const finalApproverQuery = await employeesRef.where("role", "in", ["approver", "approver-three"]).get();
-                
-                if (!finalApproverQuery.empty) {
-                    const approverNotification = buildApproverNotificationContent('approver', notificationBase);
-                    finalApproverQuery.forEach(approverDoc => {
-                        const approverData = approverDoc.data();
-                        
-                        // Create Approver notification
-                        createInAppNotification(
-                            approverData.uid,
-                            approverNotification.title,
-                            approverNotification.message,
-                            'leave_approved_by_hr',
-                            {
-                                leaveRequestId: leaveId, // Include leave request ID for navigation
-                                employeeId: leaveData.employeeId,
-                                hrId: userId,
-                                hrName: hrApproverName,
-                                leaveType: leaveData.leaveTypeName,
-                                fromDate: leaveData.fromDate || leaveData.date,
-                                toDate: leaveData.toDate || leaveData.date,
-                                comment: comment
-                            },
-                            approverNotification.titleTh,
-                            approverNotification.messageTh
-                        ).catch(approverNotifError => {
-                            console.error(`❌ Failed to send Approver notification:`, approverNotifError);
-                        });
-
-                        sendLeaveRequestNotification({
-                            body: {
-                                employeeId: leaveData.employeeId,
-                                leaveRequestId: leaveId,
-                                leaveType: leaveData.leaveTypeName,
-                                leaveTypeNameEng: leaveData.leaveTypeNameEng,
-                                fromDate: notificationBase.fromDate,
-                                toDate: notificationBase.toDate,
-                                managerId: approverData.uid,
-                                approverLevel: 'approver',
-                                channels: ['push'],
-                                titleOverride: approverNotification.title,
-                                messageOverride: approverNotification.message
-                            }
-                        }, {
-                            json: () => {}
-                        }).catch(notifError => {
-                            console.error(`❌ Failed to send final approver push notification:`, notifError);
-                        });
-                    });
-                } else {
-                }
-            }
+            // ✅ REMOVED: Old HR approval notification code (duplicate)
+            // The new code path below (lines 2004+) handles all next approver notifications generically
         } catch (notifError) {
             console.error("❌ Error sending notifications:", notifError);
         }

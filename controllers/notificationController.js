@@ -909,11 +909,15 @@ const sendLeaveStatusNotification = async (req, res) => {
                         break;
 
                     case NOTIFICATION_CHANNELS.IN_APP:
+                        // ✅ Determine notification type: approved (any approval status) or rejected
+                        const notificationType = status && status.includes('approved') 
+                            ? NOTIFICATION_TYPES.LEAVE_APPROVED 
+                            : NOTIFICATION_TYPES.LEAVE_REJECTED;
                         const inAppResult = await createInAppNotification(
                             employeeId,
                             title,
                             message,
-                            status === 'approved' ? NOTIFICATION_TYPES.LEAVE_APPROVED : NOTIFICATION_TYPES.LEAVE_REJECTED,
+                            notificationType,
                             { 
                                 employeeId,
                                 leaveRequestId, 
