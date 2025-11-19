@@ -882,30 +882,42 @@ const sendLeaveStatusNotification = async (req, res) => {
         
         // ✅ Format title: "Leave Request Approved By HR", "Leave Request Approved By Manager", etc.
         let titleStatusText = statusLabel;
+        let titleStatusTextTh = statusLabel;    
         if (status === 'approved_hr' || statusName === 'Approved by HR') {
             titleStatusText = 'Approved By HR';
+            titleStatusTextTh = 'ได้รับการอนุมัติจากฝ่ายทรัพยากรบุคคล';
         } else if (status === 'approved_manager' || statusName === 'Approved by Manager') {
             titleStatusText = 'Approved By Manager';
+            titleStatusTextTh = 'ได้รับการอนุมัติจากผู้จัดการ';
         } else if (status === 'approved_team_lead' || statusName === 'Approved by Team Lead') {
             titleStatusText = 'Approved By Team Lead';
+            titleStatusTextTh = 'ได้รับการอนุมัติจากหัวหน้าทีม';
         } else if (status === 'approved' || statusName === 'Approved') {
             titleStatusText = 'Approved';
+            titleStatusTextTh = 'ที่ได้รับการอนุมัติ';
         } else if (status === 'rejected' || statusName === 'Rejected') {
             titleStatusText = 'Rejected';
+            titleStatusTextTh = 'ถูกปฏิเสธ';
         }
         
         // ✅ Format message: "approved by HR", "approved by manager", etc.
         let messageStatusText = statusLabel.toLowerCase();
+        let messageStatusTextTh = statusLabel;
         if (status === 'approved_hr' || statusName === 'Approved by HR') {
             messageStatusText = 'approved by HR';
+            messageStatusTextTh = 'ได้รับการอนุมัติจากฝ่ายทรัพยากรบุคคล';
         } else if (status === 'approved_manager' || statusName === 'Approved by Manager') {
             messageStatusText = 'approved by manager';
+            messageStatusTextTh = 'ได้รับการอนุมัติจากผู้จัดการ';
         } else if (status === 'approved_team_lead' || statusName === 'Approved by Team Lead') {
             messageStatusText = 'approved by team lead';
+            messageStatusTextTh = 'ได้รับการอนุมัติจากหัวหน้าทีม';
         } else if (status === 'approved' || statusName === 'Approved') {
             messageStatusText = 'approved';
+            messageStatusTextTh = 'ที่ได้รับการอนุมัติ';
         } else if (status === 'rejected' || statusName === 'Rejected') {
             messageStatusText = 'rejected';
+            messageStatusTextTh = 'ถูกปฏิเสธ';
         }
         
         const title = `Leave Request ${titleStatusText}`;
