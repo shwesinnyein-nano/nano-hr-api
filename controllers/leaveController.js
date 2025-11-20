@@ -724,6 +724,51 @@ const createLeaveRequest = async (req, res) => {
                 }
             }
             const maxDays = leaveSettingData ? (leaveSettingData.leaveDay || 0) : 0;
+            
+            // ✅ Check warningDays validation - must request at least warningDays before start date
+            const warningDays = leaveSettingData ? (leaveSettingData.warningDays || 0) : 0;
+            if (warningDays > 0) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Set to start of day for accurate comparison
+                
+                let startDate = null;
+                if (requestType === 'daily') {
+                    if (!fromDate) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "From date is required for daily leave"
+                        });
+                    }
+                    startDate = new Date(fromDate);
+                } else if (requestType === 'hourly') {
+                    if (!date) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "Date is required for hourly leave"
+                        });
+                    }
+                    startDate = new Date(date);
+                }
+                
+                if (startDate) {
+                    startDate.setHours(0, 0, 0, 0); // Set to start of day
+                    const daysDifference = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    
+                    if (daysDifference < warningDays) {
+                        console.warn(`⚠️ WARNING_DAYS_VALIDATION: Request submitted ${daysDifference} day(s) before start date, but warningDays is ${warningDays}`);
+                        return res.status(400).json({
+                            success: false,
+                            code: "WARNING_DAYS_VALIDATION",
+                            message: `Leave request must be submitted at least ${warningDays} day(s) before the start date. You are submitting ${daysDifference} day(s) before.`,
+                            messageTh: `คำขอลาต้องส่งก่อนวันเริ่มต้นอย่างน้อย ${warningDays} วัน คุณกำลังส่งก่อน ${daysDifference} วัน`,
+                            warningDays: warningDays,
+                            daysBeforeStart: daysDifference,
+                            requiredDaysBefore: warningDays,
+                            startDate: requestType === 'daily' ? fromDate : date
+                        });
+                    }
+                }
+            }
 
             // Sum approved used days for this employee, leaveType, and year
             const approvedSnap = await db.collection("employee-leave")
