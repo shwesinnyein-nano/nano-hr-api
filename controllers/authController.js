@@ -756,57 +756,77 @@ exports.verifyToken = async (req, res) => {
 };
 
 // Mobile login with JWT token generation
+// ✅ UPDATED: Password is already verified by Firebase Auth on client-side
+// This endpoint only verifies user exists in Firebase Auth and employee table
 exports.mobileLogin = async (req, res) => {
     console.log("Mobile login called");
     try {
-        const { email, password } = req.body;
+        const { email, password } = req.body; // Password is optional (already verified by Firebase Auth)
         
-        // Validation
-        if (!email || !password) {
+        // Validation - only email is required
+        if (!email) {
             return res.status(400).json({ 
                 success: false,
-                message: "Email and password are required" 
+                message: "Email is required",
+                messageTh: "กรุณากรอกอีเมล"
             });
         }
 
-        // Check if employee exists with this email
-        const employeesRef = db.collection("employees");
-        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        // ✅ STEP 1: Verify user exists in Firebase Authentication
+        // (Password was already verified by Firebase Auth SDK on client-side)
+        let firebaseUser = null;
+        try {
+            firebaseUser = await admin.auth().getUserByEmail(email);
+            console.log(`✅ User found in Firebase Auth: ${email}`);
+        } catch (firebaseError) {
+            // User not found in Firebase Auth
+            if (firebaseError.code === 'auth/user-not-found') {
+                console.log(`ℹ️ User not found in Firebase Auth: ${email}`);
+                return res.status(404).json({ 
+                    success: false,
+                    message: "You need to register first",
+                    messageTh: "กรุณาลงทะเบียนก่อน"
+                });
+            } else {
+                console.error(`⚠️ Firebase Auth error: ${firebaseError.message}`);
+                return res.status(500).json({ 
+                    success: false,
+                    message: "Error checking authentication",
+                    messageTh: "เกิดข้อผิดพลาดในการตรวจสอบการยืนยันตัวตน",
+                    error: firebaseError.message 
+                });
+            }
+        }
+
+        // ✅ STEP 2: Verify email exists in employee table
+        const employeeDoc = await findEmployeeByEmail(email);
         
-        if (querySnapshot.empty) {
+        if (!employeeDoc) {
             return res.status(404).json({ 
                 success: false,
-                message: "You need to register first" 
+                message: "Employee not found in system. Please contact HR.",
+                messageTh: "ไม่พบข้อมูลพนักงานในระบบ กรุณาติดต่อ HR"
             });
         }
 
-        // Employee exists - LOGIN FLOW
-        const employeeDoc = querySnapshot.docs[0];
         const employeeData = employeeDoc.data();
 
-        // Check if employee has a password set
-        if (!employeeData.password) {
-            return res.status(400).json({ 
-                success: false,
-                message: "You need to register first" 
+        // ✅ STEP 3: Update employee document with authId if not set
+        if (!employeeData.authId) {
+            await employeeDoc.ref.update({
+                authId: firebaseUser.uid,
+                updatedAt: new Date().toISOString()
             });
+            employeeData.authId = firebaseUser.uid;
         }
 
-        // Verify password
-        if (employeeData.password !== password) {
-            return res.status(401).json({ 
-                success: false,
-                message: "Invalid password" 
-            });
-        }
-
-        // Password matches - generate JWT token
-        console.log(`✅ Mobile login successful for: ${employeeData.firstName} ${employeeData.lastName}`);
+        // ✅ STEP 4: Generate JWT token and return employee data
+        console.log(`✅ Mobile login successful for: ${employeeData.firstName || ''} ${employeeData.lastName || ''}`);
         
         const jwtSecret = 'nano-hr-mobile-secret-key-2024';
         const jwtPayload = {
             employeeId: employeeDoc.id,
-            email: employeeData.email,
+            email: getEmployeeEmail(employeeData),
             role: employeeData.role,
             firstName: employeeData.firstName,
             lastName: employeeData.lastName,
@@ -819,14 +839,15 @@ exports.mobileLogin = async (req, res) => {
         res.json({
             success: true,
             message: "Mobile login successful",
+            messageTh: "เข้าสู่ระบบสำเร็จ",
             token: jwtToken, // JWT token for mobile app
             employee: {
                 id: employeeDoc.id,
-                authId: employeeData.authId,
+                authId: employeeData.authId || firebaseUser.uid,
                 nickname: employeeData.nickname,
                 firstName: employeeData.firstName,
                 lastName: employeeData.lastName,
-                email: employeeData.email,
+                email: getEmployeeEmail(employeeData),
                 primaryNumber: employeeData.primary_number,
                 companyName: employeeData.companyName,
                 locationName: employeeData.locationName,
@@ -834,7 +855,16 @@ exports.mobileLogin = async (req, res) => {
                 positionName: employeeData.positionName,
                 status: employeeData.status,
                 role: employeeData.role,
-                profileImage: employeeData.profileImage
+                profileImage: employeeData.profileImage,
+                has2FA: !!employeeData.secret,
+                joinDate: employeeData.joinDate,
+                maritalStatus: employeeData.maritalStatus,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                salary: employeeData.salary,
+                department: employeeData.department,
+                createdAt: employeeData.createdAt,
+                updatedAt: employeeData.updatedAt
             }
         });
 
@@ -842,7 +872,8 @@ exports.mobileLogin = async (req, res) => {
         console.error("❌ Error in mobile login:", error);
         res.status(500).json({ 
             success: false,
-            message: "Mobile login failed", 
+            message: "Mobile login failed",
+            messageTh: "การเข้าสู่ระบบล้มเหลว",
             error: error.message 
         });
     }
