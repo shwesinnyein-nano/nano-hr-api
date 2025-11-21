@@ -371,7 +371,7 @@ exports.loginWithEmailPassword = async (req, res) => {
     }
 };
 
-// LOGIN ENDPOINT - Email and Password Login with comprehensive validation
+// LOGIN ENDPOINT - Email and Password Login (Firebase Auth only)
 exports.loginUser = async (req, res) => {
     console.log("loginUser called");
     try {
@@ -385,51 +385,70 @@ exports.loginUser = async (req, res) => {
             });
         }
 
-        // Check if employee exists with this email
-        const employeesRef = db.collection("employees");
-        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        // ✅ STEP 1: Check Firebase Authentication first
+        let firebaseUser = null;
+        try {
+            firebaseUser = await admin.auth().getUserByEmail(email);
+            console.log(`✅ User found in Firebase Auth: ${email}`);
+        } catch (firebaseError) {
+            // User not found in Firebase Auth
+            if (firebaseError.code === 'auth/user-not-found') {
+                console.log(`ℹ️ User not found in Firebase Auth: ${email}`);
+                return res.status(404).json({ 
+                    success: false,
+                    message: "You need to register first",
+                    messageTh: "กรุณาลงทะเบียนก่อน"
+                });
+            } else {
+                console.error(`⚠️ Firebase Auth error: ${firebaseError.message}`);
+                return res.status(500).json({ 
+                    success: false,
+                    message: "Error checking authentication",
+                    error: firebaseError.message 
+                });
+            }
+        }
+
+        // ✅ STEP 2: User exists in Firebase Auth - Get employee data from Firestore
+        const employeeDoc = await findEmployeeByEmail(email);
         
-        if (querySnapshot.empty) {
-            // Employee doesn't exist - Show register message
+        if (!employeeDoc) {
             return res.status(404).json({ 
                 success: false,
-                message: "You need to register first" 
+                message: "Employee not found in system" 
             });
         }
 
-        // Employee exists - LOGIN FLOW
-        const employeeDoc = querySnapshot.docs[0];
         const employeeData = employeeDoc.data();
 
-        // Check if employee has a password set
-        if (!employeeData.password) {
-            return res.status(400).json({ 
-                success: false,
-                message: "You need to register first" 
+        // Update employee document with authId if not set
+        if (!employeeData.authId) {
+            await employeeDoc.ref.update({
+                authId: firebaseUser.uid,
+                updatedAt: new Date().toISOString()
             });
+            employeeData.authId = firebaseUser.uid;
         }
 
-        // Verify password
-        if (employeeData.password !== password) {
-            return res.status(401).json({ 
-                success: false,
-                message: "Invalid password" 
-            });
-        }
-
-        // Password matches - successful login
-        console.log(`Successful login for employee: ${email}`);
+        // Create custom token for Firebase Auth login
+        // Note: Password verification happens on client-side with Firebase Auth SDK
+        const customToken = await admin.auth().createCustomToken(firebaseUser.uid);
+        
+        console.log(`✅ Login successful: ${email}`);
 
         res.json({
             success: true,
             message: "Login successful",
+            messageTh: "เข้าสู่ระบบสำเร็จ",
+            firebaseAuth: true,
+            customToken: customToken,
             employee: {
                 id: employeeDoc.id,
-                authId: employeeData.authId,
+                authId: firebaseUser.uid,
                 nickname: employeeData.nickname,
                 firstName: employeeData.firstName,
                 lastName: employeeData.lastName,
-                email: employeeData.email,
+                email: getEmployeeEmail(employeeData),
                 primaryNumber: employeeData.primary_number,
                 companyName: employeeData.companyName,
                 locationName: employeeData.locationName,
@@ -470,7 +489,8 @@ exports.registerUser = async (req, res) => {
         if (!email || !password || !confirmPassword) {
             return res.status(400).json({ 
                 success: false,
-                message: "Email, password, and confirm password are required" 
+                message: "Email, password, and confirm password are required",
+                messageTh: "กรุณากรอกอีเมล รหัสผ่าน และยืนยันรหัสผ่าน"
             });
         }
 
@@ -478,78 +498,130 @@ exports.registerUser = async (req, res) => {
         if (password !== confirmPassword) {
             return res.status(400).json({ 
                 success: false,
-                message: "Password and confirm password do not match" 
+                message: "Password and confirm password do not match",
+                messageTh: "รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน"
             });
         }
 
-        // Check if employee exists with this email
-        const employeesRef = db.collection("employees");
-        const querySnapshot = await employeesRef.where("email", "==", email).get();
+        // Check if password meets minimum requirements
+        if (password.length < 6) {
+            return res.status(400).json({ 
+                success: false,
+                message: "Password must be at least 6 characters long",
+                messageTh: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"
+            });
+        }
+
+        // ✅ STEP 1: Check if employee exists with this email in employee table
+        const employeeDoc = await findEmployeeByEmail(email);
         
-        if (querySnapshot.empty) {
-            // Employee doesn't exist in system - Show HR contact message
+        if (!employeeDoc) {
+            // Email not found in employee table - Show HR contact message
             return res.status(404).json({ 
                 success: false,
-                message: "Your email address was not found in system, please contact to your HR" 
+                message: "Your email address was not found in system, please contact to your HR",
+                messageTh: "ไม่พบอีเมลของคุณในระบบ กรุณาติดต่อ HR"
             });
         }
 
-        // Employee exists in system - REGISTRATION FLOW
-        const employeeDoc = querySnapshot.docs[0];
+        // ✅ STEP 2: Email exists in employee table - Check if already registered in Firebase Auth
         const employeeData = employeeDoc.data();
 
-        // Check if employee already has a password set
-        if (employeeData.password) {
+        // Check if user already exists in Firebase Auth
+        try {
+            const existingFirebaseUser = await admin.auth().getUserByEmail(email);
+            // User already exists in Firebase Auth
             return res.status(409).json({ 
                 success: false,
-                message: "Account already registered. Please use login instead." 
+                message: "Account already registered. Please use login instead.",
+                messageTh: "บัญชีนี้ลงทะเบียนแล้ว กรุณาใช้การเข้าสู่ระบบ"
             });
+        } catch (firebaseError) {
+            if (firebaseError.code !== 'auth/user-not-found') {
+                // Some other Firebase Auth error
+                console.error(`⚠️ Firebase Auth error during registration: ${firebaseError.message}`);
+                return res.status(500).json({ 
+                    success: false,
+                    message: "Error checking authentication",
+                    error: firebaseError.message 
+                });
+            }
+            // User doesn't exist in Firebase Auth - proceed with registration
         }
 
-        // Save password for existing employee
-        await employeeDoc.ref.update({ 
-            password: password,
-            updatedAt: new Date().toISOString()
-        });
-        
-        console.log(`Password saved for existing employee: ${email}`);
-
-        // Return success response for registration
-        res.json({
-            success: true,
-            message: "Registration successful",
-            employee: {
-                id: employeeDoc.id,
-                authId: employeeData.authId,
-                nickname: employeeData.nickname,
-                firstName: employeeData.firstName,
-                lastName: employeeData.lastName,
-                email: employeeData.email,
-                primaryNumber: employeeData.primary_number,
-                companyName: employeeData.companyName,
-                locationName: employeeData.locationName,
-                branchName: employeeData.branchName,
-                positionName: employeeData.positionName,
-                status: employeeData.status,
-                role: employeeData.role,
-                profileImage: employeeData.profileImage,
-                has2FA: !!employeeData.secret,
-                joinDate: employeeData.joinDate,
-                maritalStatus: employeeData.maritalStatus,
-                dateOfBirth: employeeData.dateOfBirth,
-                gender: employeeData.gender,
-                salary: employeeData.salary,
-                department: employeeData.department,
-                createdAt: employeeData.createdAt,
+        // ✅ STEP 3: Register user in Firebase Authentication
+        try {
+            const newFirebaseUser = await admin.auth().createUser({
+                email: email,
+                password: password,
+                displayName: `${employeeData.firstName || ''} ${employeeData.lastName || ''}`.trim(),
+                emailVerified: false
+            });
+            
+            console.log(`✅ User created in Firebase Auth: ${newFirebaseUser.uid}`);
+            
+            // Update employee document with authId
+            await employeeDoc.ref.update({ 
+                authId: newFirebaseUser.uid,
+                password: password, // Also save password in Firestore for backward compatibility
                 updatedAt: new Date().toISOString()
-            }
-        });
+            });
+            
+            // Create custom token for immediate login after registration
+            const customToken = await admin.auth().createCustomToken(newFirebaseUser.uid);
+            
+            console.log(`✅ Registration successful: ${email}`);
+
+            // Return success response for registration
+            res.json({
+                success: true,
+                message: "Registration successful",
+                messageTh: "ลงทะเบียนสำเร็จ",
+                firebaseAuth: true,
+                customToken: customToken,
+                employee: {
+                    id: employeeDoc.id,
+                    authId: newFirebaseUser.uid,
+                    nickname: employeeData.nickname,
+                    firstName: employeeData.firstName,
+                    lastName: employeeData.lastName,
+                    email: getEmployeeEmail(employeeData),
+                    primaryNumber: employeeData.primary_number,
+                    companyName: employeeData.companyName,
+                    locationName: employeeData.locationName,
+                    branchName: employeeData.branchName,
+                    positionName: employeeData.positionName,
+                    status: employeeData.status,
+                    role: employeeData.role,
+                    profileImage: employeeData.profileImage,
+                    has2FA: !!employeeData.secret,
+                    joinDate: employeeData.joinDate,
+                    maritalStatus: employeeData.maritalStatus,
+                    dateOfBirth: employeeData.dateOfBirth,
+                    gender: employeeData.gender,
+                    salary: employeeData.salary,
+                    department: employeeData.department,
+                    createdAt: employeeData.createdAt,
+                    updatedAt: new Date().toISOString()
+                }
+            });
+
+        } catch (createError) {
+            console.error(`❌ Failed to create Firebase Auth user: ${createError.message}`);
+            return res.status(500).json({ 
+                success: false,
+                message: "Failed to create account. Please try again.",
+                messageTh: "ไม่สามารถสร้างบัญชีได้ กรุณาลองอีกครั้ง",
+                error: createError.message 
+            });
+        }
 
     } catch (error) {
         console.error("❌ Error in registerUser:", error);
         res.status(500).json({ 
             success: false,
             message: "Internal server error",
+            messageTh: "เกิดข้อผิดพลาดในระบบ",
             error: error.message 
         });
     }
