@@ -7,6 +7,7 @@ const { authenticateToken } = require("../middleware/authMiddleware");
 const router = express.Router();
 
 router.post("/check-employee", employeeController.checkEmployee);
+router.post("/check-employee-mobile", employeeController.checkEmployeeMobile);
 router.post("/login", employeeController.login);
 router.post("/register", employeeController.register);
 router.post("/check-email", employeeController.checkEmail);
