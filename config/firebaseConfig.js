@@ -19,8 +19,6 @@
 
 const admin = require("firebase-admin");
 
-console.log("🔄 Firebase Admin initialization starting...");
-console.log("Admin apps count:", admin.apps.length);
 
 // Check if FIREBASE_ADMIN_CREDENTIALS exists
 if (!process.env.FIREBASE_ADMIN_CREDENTIALS) {

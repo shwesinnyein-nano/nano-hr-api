@@ -34,22 +34,16 @@ const allowedOrigin = process.env.NODE_ENV === 'production'
 // console.log("production url", productionUrl)
 // const allowedOrigins = [productionUrl, "https://nano-hr.web.app"];
 
-const productionUrl = process.env.PRODUCTION_FRONTEND_URL || "https://nano-hr.web.app";
-const allowedOrigins = [
-    productionUrl, 
-    "https://nano-hr.web.app", 
-    "http://localhost:4200",
-    "http://localhost:3000",
-    "http://localhost:8080",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:4200",
-    "http://127.0.0.1:8080",
-    // Flutter web development origins
-    "http://localhost:5000",
-    "http://127.0.0.1:5000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000"
-];
+// const productionUrl = process.env.PRODUCTION_FRONTEND_URL || "https://nano-hr.web.app";
+// const allowedOrigins = [
+//     productionUrl, 
+//     "https://nano-hr.web.app", 
+//     "http://localhost:4200",
+   
+// ];
+const productionUrl = process.env.PRODUCTION_FRONTEND_URL || "https://nanostores.co.th/dashboard/admin";
+const allowedOrigins = [productionUrl, "https://nanostores.co.th/dashboard/admin"];
+
 
 app.use(cors({
     origin: function (origin, callback) {
